@@ -1,0 +1,149 @@
+[project]
+name = "dr-wandb"
+version = "0.1.0"
+description = "Interact with wandb from python"
+readme = "README.md"
+authors = [
+    { name = "Danielle Rothermel", email = "danielle.rothermel@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dr_wandb"]
+
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+]
+
+[tool.ruff]
+include = [
+    "src/**/*.py",
+    "scripts/**/*.py",
+    "tests/**/*.py",
+]
+line-length = 88
+cache-dir = ".ruff_cache"
+exclude = ["outputs/*", "notebooks/*", "plots/*", "data/*", "docs/*"]
+
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "double"
+
+[tool.ruff.lint]
+extend-select = [
+    # Use for precommit hooks
+    "A",                    # Variable and argument shadowing
+    "B", "FBT003",          # bugbear criticals
+    "C4", "C90",            # perf / complexity
+    "F821",                 # undefined name
+    "INP",                  # missing __init__.py
+    "N999",                 # pep8 avoid invalid module naming
+    "NPY", "PD",            # data-science-specific
+    "PERF",                 # unnecessary casts, bad iteration patterns
+    "PIE",                  # duplicate class field defs, etc
+    "PLE",                  # pylint errors
+    "PLW",                  # pylint warning
+    "PLR",                  # safe comparisons
+    "PT",                   # pytest
+    "PTH",                  # use pathlib not os.path
+    "RUF",                  # ruff internals
+    "S",                    # security
+    "SLF",                  # private member accessed outside class
+    "SIM",                  # simplify code
+    "T10",                  # no pdb in code
+    "TID",                  # tidy imports
+    "UP",                   # upgrades
+    "YTT",                  # correct comparisons to sys version
+
+    # Use the rest of the time
+    "ARG",                  # argumetns
+    "ANN",                  # api clarity
+    "COM",                  # training comma enforcement
+    "D",                    # docstring styling
+    "E",                    # indentation and spaceing
+    "F",                    # unused import or local variable
+    "FA",                   # future annotations
+    "FLY",                  # fstrings instead of string joins
+    "ICN",                  # specific import names
+    "W",                    # space normalization
+    "E402",                 # imports at top of file
+]
+ignore = [
+    "D",                    # docstring styling
+    "EXE",                  # Files needn't be executable
+    "I",                    # sort imports: covered by ruff format
+    "INT",                  # Gettext rules, unused
+    "ISC",                  # String concat rules, strict
+    "LOG",                  # logger usage, strict
+    "TD",                   # TODOs are fine
+    "NPY002",               # No numpy generator lints
+    "PD901",                # let me use df for dataframes
+    "RUF001",               # Don't worry about ambig str chars
+    "B011",                 # enable assert False
+    "PT018",                # enable long asserts
+    "PT015",                # enable asserts that always fail
+    "ANN401",               # allow Any
+    "ARG001",               # callbacks
+    "COM812", "ISC001",     # Overlap with each other in formatting
+    "FBT001", "FBT002",     # bool kwargs common
+    "ICN002", "ICN003",     # import rules that are overly restrictive
+    "PLR0913",              # Too many args, rough with ML code
+    "S101",                 # asserts for invariants
+    "D203",                 # either D203 or D211
+    "D213",                 # either D212 or D213
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = [
+    "D",
+]
+"tests/**/*.py" = [
+    "ARG",                  # unused arguments in fixtures
+    "PLR2004",              # Magic values are OK in tests
+    "D103",
+    "S106",
+    "SLF001",
+    "S101",
+]
+"**/scripts/**/*.py" = [
+    "T201",                 # print() is fine in scripts
+    "D101", "D102", "D103", # don't require docstrings
+]
+"*_notebook.py" = [
+    "E402",                 # Import order OK in notebooks
+    "F401",                 # Unused imports OK in notebooks
+]
+"examples/**" = [
+    "INP001",               # Examples are standalone scripts, not packages
+]  
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15         # Higher threshold for ML
+
+[tool.ruff.lint.pylint]
+max-args            = 8     # allow up to 8 params before PLR0913 fires
+max-branches        = 20    # PLR0912
+max-statements      = 80    # PLR0915
+max-nested-blocks   = 8     # PLR1702
+max-returns         = 10    # PLR0911
+
+[tool.ruff.lint.flake8-import-conventions.aliases]
+numpy               = "np"
+"numpy.typing"      = "npt"
+pandas              = "pd"
+"matplotlib.pyplot" = "plt"
+seaborn             = "sns"
+"dask.dataframe"    = "dd"
+polars              = "pl"
+lightning			= "L"
+"jax.numpy" 	    = "jnp"
