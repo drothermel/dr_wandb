@@ -15,6 +15,9 @@ DEFAULT_RUNS_FILENAME = "runs_metadata.parquet"
 DEFAULT_HISTORY_FILENAME = "runs_history.parquet"
 SELECT_FIELDS = ["project", "entity", "state", "run_ids"]
 
+type RunId = str
+type RunState = Literal["finished", "running", "crashed", "failed", "killed"]
+
 
 def build_wandb_query(
     base_query: Literal["runs", "history"],
@@ -58,9 +61,9 @@ class Base(DeclarativeBase):
 class WandBRun(Base):
     __tablename__ = "wandb_runs"
 
-    run_id: Mapped[str] = mapped_column(primary_key=True)
+    run_id: Mapped[RunId] = mapped_column(primary_key=True)
     run_name: Mapped[str]
-    state: Mapped[str]
+    state: Mapped[RunState]
     project: Mapped[str]
     entity: Mapped[str]
     created_at: Mapped[datetime | None]
