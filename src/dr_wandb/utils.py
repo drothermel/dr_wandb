@@ -8,7 +8,8 @@ from dr_wandb.constants import RunId, RunState
 
 
 def extract_as_datetime(data: dict[str, Any], key: str) -> datetime | None:
-    return datetime.fromtimestamp(data.get(key)) if data.get(key) else None
+    timestamp = data.get(key)
+    return datetime.fromtimestamp(timestamp) if timestamp is not None else None
 
 
 def select_updated_runs(

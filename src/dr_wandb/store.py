@@ -7,7 +7,8 @@ from urllib.parse import urlparse
 
 import pandas as pd
 import wandb
-from sqlalchemy import Engine, OperationalError, create_engine, text
+from sqlalchemy import Engine, create_engine, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from dr_wandb.constants import (
@@ -42,6 +43,20 @@ def delete_history_for_runs(session: Session, run_ids: list[RunId]) -> None:
         text("DELETE FROM wandb_history WHERE run_id = ANY(:run_ids)"),
         {"run_ids": run_ids},
     )
+
+
+def save_update_run(session: Session, run: wandb.apis.public.Run) -> None:
+    existing_run = session.get(RunRecord, run.id)
+    if existing_run:
+        existing_run.update_from_wandb_run(run)
+    else:
+        session.add(RunRecord.from_wandb_run(run))
+
+
+def delete_add_history(session: Session, run_id: RunId, history: History) -> None:
+    delete_history_for_runs(session, [run_id])
+    for history_entry in history:
+        session.add(HistoryEntryRecord.from_wandb_history(history_entry, run_id))
 
 
 def ensure_database_exists(database_url: str) -> str:
@@ -79,26 +94,18 @@ class ProjectStore:
 
     def store_run(self, run: wandb.apis.public.Run) -> None:
         with Session(self.engine) as session:
-            existing_run = session.get(RunRecord, run.id)
-            if existing_run:
-                existing_run.update_from_wandb_run(run)
-            else:
-                session.add(RunRecord.from_wandb_run(run))
+            save_update_run(session, run)
             session.commit()
 
     def store_runs(self, runs: list[wandb.apis.public.Run]) -> None:
         with Session(self.engine) as session:
             for run in runs:
-                session.add(RunRecord.from_wandb_run(run))
+                save_update_run(session, run)
             session.commit()
 
     def store_history(self, run_id: RunId, history: History) -> None:
         with Session(self.engine) as session:
-            delete_history_for_runs(session, [run_id])
-            for history_entry in history:
-                session.add(
-                    HistoryEntryRecord.from_wandb_history(history_entry, run_id)
-                )
+            delete_add_history(session, run_id, history)
             session.commit()
 
     def store_histories(
@@ -115,6 +122,14 @@ class ProjectStore:
                     session.add(
                         HistoryEntryRecord.from_wandb_history(history_entry, run_id)
                     )
+            session.commit()
+
+    def store_run_and_history(
+        self, run: wandb.apis.public.Run, history: History
+    ) -> None:
+        with Session(self.engine) as session:
+            delete_add_history(session, run.id, history)
+            save_update_run(session, run)
             session.commit()
 
     def get_runs_df(
@@ -135,12 +150,12 @@ class ProjectStore:
     ) -> pd.DataFrame:
         with Session(self.engine) as session:
             result = session.execute(build_history_query(run_ids=run_ids))
-        return pd.DataFrame(
-            [
-                history.to_dict(include_metadata=include_metadata)
-                for history in result.scalars().all()
-            ]
-        )
+            return pd.DataFrame(
+                [
+                    history.to_dict(include_metadata=include_metadata)
+                    for history in result.scalars().all()
+                ]
+            )
 
     def get_existing_run_states(
         self, kwargs: dict[FilterField, Any] | None = None

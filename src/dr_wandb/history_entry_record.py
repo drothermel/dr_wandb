@@ -1,4 +1,6 @@
-import datetime
+from __future__ import annotations
+
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Select, select
@@ -9,7 +11,6 @@ from dr_wandb.constants import Base, RunId
 from dr_wandb.utils import extract_as_datetime
 
 type HistoryEntry = dict[str, Any]
-type History = list[HistoryEntry]
 
 
 class HistoryEntryRecord(Base):
@@ -26,7 +27,7 @@ class HistoryEntryRecord(Base):
     @classmethod
     def from_wandb_history(
         cls, history_entry: HistoryEntry, run_id: str
-    ) -> "HistoryEntryRecord":
+    ) -> HistoryEntryRecord:
         return cls(
             run_id=run_id,
             step=history_entry.get("_step"),

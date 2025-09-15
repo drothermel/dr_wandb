@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import logging
+from dataclasses import dataclass
 
 import wandb
 
-from dr_wandb.constants import ProgressCallback, RunId
+from dr_wandb.constants import ProgressCallback
 from dr_wandb.store import ProjectStore
 from dr_wandb.utils import default_progress_callback, select_updated_runs
 
@@ -15,20 +16,16 @@ class DownloaderStats:
     num_stored_runs: int = 0
     num_new_runs: int = 0
     num_updated_runs: int = 0
-    num_downloaded_histories: int = 0
-    num_downloaded_history_entries: int = 0
-    downloaded_rids: list[RunId] = field(default_factory=list)
 
     def __str__(self) -> str:
         return "\n".join(
             [
+                "",
                 ":: Downloader Stats ::",
                 f" - # WandB runs: {self.num_wandb_runs:,}",
                 f" - # Stored runs: {self.num_stored_runs:,}",
                 f" - # New runs: {self.num_new_runs:,}",
                 f" - # Updated runs: {self.num_updated_runs:,}",
-                f" - # Histories: {self.num_downloaded_histories:,}",
-                f" - # History entries: {self.num_downloaded_history_entries:,}",
             ]
         )
 
@@ -69,7 +66,8 @@ class Downloader:
         entity: str,
         project: str,
         force_refresh: bool = False,
-    ) -> tuple[DownloaderStats, list[wandb.apis.public.Run]]:
+        with_history: bool = False,
+    ) -> DownloaderStats:
         wandb_runs = self.get_all_runs(entity, project)
         stored_states = self.store.get_existing_run_states(
             {"entity": entity, "project": project}
@@ -79,39 +77,26 @@ class Downloader:
             if force_refresh
             else select_updated_runs(wandb_runs, stored_states)
         )
+        num_new_runs = len([r for r in runs_to_download if r.id not in stored_states])
         stats = DownloaderStats(
             num_wandb_runs=len(wandb_runs),
             num_stored_runs=len(stored_states),
-            num_new_runs=0,
-            num_updated_runs=0,
-            num_downloaded_histories=0,
-            num_downloaded_history_entries=0,
-            downloaded_rids=[],
+            num_new_runs=num_new_runs,
+            num_updated_runs=len(runs_to_download) - num_new_runs,
         )
         if len(runs_to_download) == 0:
+            logging.info(">> No runs to download")
             return stats
 
-        for i, run in enumerate(runs_to_download):
-            self.store.store_run(run)
-            self.progress_callback(i + 1, len(runs_to_download), run.name)
-            if run.id not in stored_states:
-                stats.num_new_runs += 1
-            else:
-                stats.num_updated_runs += 1
-            stats.downloaded_rids.append(run.id)
-        return stats, runs_to_download
+        if not with_history:
+            logging.info(">> Runs only mode, bulk downloading runs")
+            self.store.store_runs(runs_to_download)
+            return stats
 
-    def download_histories(
-        self,
-        runs: list[wandb.apis.public.Run],
-        stats: DownloaderStats,
-    ) -> DownloaderStats:
-        histories = [list(run.scan_history()) for run in runs]
-        self.store.store_histories(runs, histories)
-        stats.num_downloaded_histories += len(histories)
-        stats.num_downloaded_history_entries += sum(
-            len(history) for history in histories
-        )
+        logging.info(">> Downloading runs and history data together")
+        for i, run in enumerate(runs_to_download):
+            self.store.store_run_and_history(run, list(run.scan_history()))
+            self.progress_callback(i + 1, len(runs_to_download), run.name)
         return stats
 
     def download_project(
@@ -121,10 +106,12 @@ class Downloader:
         runs_only: bool = False,
         force_refresh: bool = False,
     ) -> DownloaderStats:
-        stats, downloaded_runs = self.download_runs(entity, project, force_refresh)
-        if not runs_only:
-            stats = self.download_histories(downloaded_runs, stats)
+        stats = self.download_runs(
+            entity, project, force_refresh, with_history=not runs_only
+        )
+        logging.info(">> Download completed")
         return stats
 
     def write_downloaded_to_parquet(self) -> None:
+        logging.info(">> Beginning export to parquet")
         self.store.export_to_parquet()

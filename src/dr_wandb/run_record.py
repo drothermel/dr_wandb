@@ -1,4 +1,6 @@
-import datetime
+from __future__ import annotations
+
+from datetime import datetime
 from typing import Any, Literal
 
 import wandb
@@ -59,7 +61,7 @@ class RunRecord(Base):
         ]
 
     @classmethod
-    def from_wandb_run(cls, wandb_run: wandb.apis.public.Run) -> "RunRecord":
+    def from_wandb_run(cls, wandb_run: wandb.apis.public.Run) -> RunRecord:
         return cls(
             run_id=wandb_run.id,
             run_name=wandb_run.name,
@@ -68,7 +70,7 @@ class RunRecord(Base):
             entity=wandb_run.entity,
             created_at=wandb_run.created_at,
             config=dict(wandb_run.config),
-            summary=dict(wandb_run.summary._json_dict),  # noqa: SLF001
+            summary=dict(wandb_run.summary._json_dict) if wandb_run.summary else {},  # noqa: SLF001
             wandb_metadata=wandb_run.metadata or {},
             system_metrics=wandb_run.system_metrics or {},
             system_attrs=dict(wandb_run._attrs),  # noqa: SLF001
