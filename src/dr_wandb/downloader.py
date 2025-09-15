@@ -26,6 +26,7 @@ class DownloaderStats:
                 f" - # Stored runs: {self.num_stored_runs:,}",
                 f" - # New runs: {self.num_new_runs:,}",
                 f" - # Updated runs: {self.num_updated_runs:,}",
+                "",
             ]
         )
 

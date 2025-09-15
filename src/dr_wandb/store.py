@@ -29,6 +29,7 @@ from dr_wandb.run_record import (
     RunRecord,
     build_run_query,
 )
+from dr_wandb.utils import safe_convert_for_parquet
 
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "data"
 DEFAULT_RUNS_FILENAME = "runs_metadata"
@@ -173,17 +174,20 @@ class ProjectStore:
         logging.info(f">> Using data output directory: {self.output_dir}")
         history_df = self.get_history_df()
         if not history_df.empty:
-            history_path = self.output_dir / history_filename
-            history_df.to_parquet(history_path, index=False)
+            history_path = self.output_dir / f"{history_filename}.parquet"
+            history_df = safe_convert_for_parquet(history_df)
+            history_df.to_parquet(history_path, engine="pyarrow", index=False)
             logging.info(f">> Wrote history_df to {history_path}")
         for include_type in RUN_DATA_COMPONENTS:
-            runs_df = self.get_runs_df(include=include_type)
+            runs_df = self.get_runs_df(include=[include_type])
             if not runs_df.empty:
                 runs_path = self.output_dir / f"{runs_filename}_{include_type}.parquet"
-                runs_df.to_parquet(runs_path, index=False)
+                runs_df = safe_convert_for_parquet(runs_df)
+                runs_df.to_parquet(runs_path, engine="pyarrow", index=False)
                 logging.info(f">> Wrote runs_df with {include_type} to {runs_path}")
         runs_df_full = self.get_runs_df(include="all")
         if not runs_df_full.empty:
             runs_path = self.output_dir / f"{runs_filename}.parquet"
-            runs_df_full.to_parquet(runs_path, index=False)
+            runs_df_full = safe_convert_for_parquet(runs_df_full)
+            runs_df_full.to_parquet(runs_path, engine="pyarrow", index=False)
             logging.info(f">> Wrote runs_df with all parts to {runs_path}")
