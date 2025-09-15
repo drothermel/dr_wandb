@@ -1,0 +1,1 @@
+/Users/daniellerothermel/drotherm/repos/dr_ref/docs/processes/general_project_extraction_prompt.md
