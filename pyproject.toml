@@ -39,11 +39,10 @@ dev = [
 include = [
     "src/**/*.py",
     "scripts/**/*.py",
-    "tests/**/*.py",
 ]
 line-length = 88
 cache-dir = ".ruff_cache"
-exclude = ["outputs/*", "notebooks/*", "plots/*", "data/*", "docs/*"]
+exclude = ["outputs/*", "notebooks/*", "plots/*", "data/*", "docs/*", "tests/*"]
 
 [tool.ruff.format]
 indent-style = "space"
