@@ -1,20 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
+
 import wandb
 
-from dr_wandb.store import RunId, RunState, Store
-
-
-def select_new_and_unfinished_runs(
-    all_runs: list[wandb.apis.public.Run],
-    existing_run_states: dict[RunId, RunState],
-) -> list[wandb.apis.public.Run]:
-    return [
-        run
-        for run in all_runs
-        if run.id not in existing_run_states
-        or existing_run_states[run.id] != "finished"
-    ]
+from dr_wandb.store import Store
+from dr_wandb.utils import select_new_and_unfinished_runs
 
 
 class Downloader:
@@ -52,3 +43,6 @@ class Downloader:
         return select_new_and_unfinished_runs(
             all_runs, self.store.get_existing_run_states(entity, project)
         )
+
+    def download_run_data(self, run: wandb.apis.public.Run) -> dict[str, Any]:
+        pass
