@@ -20,7 +20,7 @@ from dr_wandb.constants import (
     RunId,
     RunState,
 )
-from dr_wandb.utils import build_query, delete_history_for_run
+from dr_wandb.utils import build_query, delete_history_for_run, extract_as_datetime
 
 
 class Base(DeclarativeBase):
@@ -82,7 +82,7 @@ class RunRecord(Base):
         self, include: list[RunDataComponent] | All | None = None
     ) -> dict[str, Any]:
         include = include or []
-        if "all" in include:
+        if include == "all":
             include = RUN_DATA_COMPONENTS
         assert all(field in RUN_DATA_COMPONENTS for field in include)
         data = {k: getattr(self, k) for k in self.standard_fields()}
@@ -109,7 +109,7 @@ class HistoryRecord(Base):
         return cls(
             run_id=run_id,
             step=history_entry.get("_step"),
-            timestamp=history_entry.get("_timestamp"),
+            timestamp=extract_as_datetime(history_entry, "_timestamp"),
             runtime=history_entry.get("_runtime"),
             wandb_metadata=history_entry.get("_wandb", {}),
             metrics={k: v for k, v in history_entry.items() if not k.startswith("_")},

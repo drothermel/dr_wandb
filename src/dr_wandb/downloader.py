@@ -4,14 +4,14 @@ from typing import Any
 
 import wandb
 
-from dr_wandb.store import Store
+from dr_wandb.store import ProjectStore
 from dr_wandb.utils import select_new_and_unfinished_runs
 
 
 class Downloader:
     def __init__(
         self,
-        store: Store,
+        store: ProjectStore,
         runs_per_page: int = 500,
     ) -> None:
         self.store = store

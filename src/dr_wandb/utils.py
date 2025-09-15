@@ -5,31 +5,31 @@ import wandb
 from sqlalchemy import Select, select, text
 from sqlalchemy.orm import Session
 
-from dr_wandb.constants import SELECT_FIELDS, QueryType, RunId, RunState
-from dr_wandb.store import History, Run
+from dr_wandb.constants import SUPPORTED_FILTER_FIELDS, QueryType, RunId, RunState
+from dr_wandb.store import HistoryRecord, RunRecord
 
 
 def build_query(
     base_query: QueryType,
     kwargs: dict[str, Any] | None = None,
-) -> Select[Run]:
+) -> Select[RunRecord]:
     assert base_query in ["runs", "history"]
-    query = select(Run)
+    query = select(RunRecord)
     if base_query == "history":
-        query = select(History, Run.run_name, Run.project).join(
-            Run, History.run_id == Run.run_id
+        query = select(HistoryRecord, RunRecord.run_name, RunRecord.project).join(
+            RunRecord, HistoryRecord.run_id == RunRecord.run_id
         )
     if kwargs is not None:
-        assert all(k in SELECT_FIELDS for k in kwargs)
+        assert all(k in SUPPORTED_FILTER_FIELDS for k in kwargs)
         assert all(v is not None for v in kwargs.values())
         if "project" in kwargs:
-            query = query.where(Run.project == kwargs["project"])
+            query = query.where(RunRecord.project == kwargs["project"])
         if "entity" in kwargs:
-            query = query.where(Run.entity == kwargs["entity"])
+            query = query.where(RunRecord.entity == kwargs["entity"])
         if "state" in kwargs:
-            query = query.where(Run.state == kwargs["state"])
+            query = query.where(RunRecord.state == kwargs["state"])
         if "run_ids" in kwargs:
-            query = query.where(Run.run_id.in_(kwargs["run_ids"]))
+            query = query.where(RunRecord.run_id.in_(kwargs["run_ids"]))
     return query
 
 
