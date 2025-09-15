@@ -2,63 +2,32 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import pandas as pd
-from sqlalchemy import Engine, Select, create_engine, select, text
+import wandb
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
-DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "data"
-DEFAULT_RUNS_FILENAME = "runs_metadata.parquet"
-DEFAULT_HISTORY_FILENAME = "runs_history.parquet"
-SELECT_FIELDS = ["project", "entity", "state", "run_ids"]
-
-type RunId = str
-type RunState = Literal["finished", "running", "crashed", "failed", "killed"]
-
-
-def build_query(
-    base_query: Literal["runs", "history"],
-    kwargs: dict[str, Any] | None = None,
-) -> Select[Run]:
-    assert base_query in ["runs", "history"]
-    query = select(Run)
-    if base_query == "history":
-        query = select(History, Run.run_name, Run.project).join(
-            Run, History.run_id == Run.run_id
-        )
-    if kwargs is not None:
-        assert all(k in SELECT_FIELDS for k in kwargs)
-        assert all(v is not None for v in kwargs.values())
-        if "project" in kwargs:
-            query = query.where(Run.project == kwargs["project"])
-        if "entity" in kwargs:
-            query = query.where(Run.entity == kwargs["entity"])
-        if "state" in kwargs:
-            query = query.where(Run.state == kwargs["state"])
-        if "run_ids" in kwargs:
-            query = query.where(Run.run_id.in_(kwargs["run_ids"]))
-    return query
-
-
-def delete_history_for_run(session: Session, run_id: str) -> None:
-    session.execute(
-        text("DELETE FROM wandb_history WHERE run_id = :run_id"),
-        {"run_id": run_id},
-    )
-
-
-def extract_as_datetime(data: dict[str, Any], key: str) -> datetime | None:
-    return datetime.fromtimestamp(data.get(key)) if data.get(key) else None
+from dr_wandb.constants import (
+    DEFAULT_HISTORY_FILENAME,
+    DEFAULT_OUTPUT_DIR,
+    DEFAULT_RUNS_FILENAME,
+    RUN_DATA_COMPONENTS,
+    All,
+    RunDataComponent,
+    RunId,
+    RunState,
+)
+from dr_wandb.utils import build_query, delete_history_for_run
 
 
 class Base(DeclarativeBase):
     pass
 
 
-class Run(Base):
+class RunRecord(Base):
     __tablename__ = "wandb_runs"
 
     run_id: Mapped[RunId] = mapped_column(primary_key=True)
@@ -67,70 +36,102 @@ class Run(Base):
     project: Mapped[str]
     entity: Mapped[str]
     created_at: Mapped[datetime | None]
-    runtime: Mapped[int | None]
-    raw_data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    metadata: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    system_metrics: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    system_attrs: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    sweep_info: Mapped[dict[str, Any]] = mapped_column(JSONB)
 
     @classmethod
-    def get_standard_fields(cls) -> list[str]:
-        return [col.name for col in cls.__table__.columns if col.name != "raw_data"]
+    def standard_fields(cls) -> list[str]:
+        return [
+            col.name
+            for col in cls.__table__.columns
+            if col.name not in RUN_DATA_COMPONENTS
+        ]
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Run:
-        standard_fields = cls.get_standard_fields()
+    def from_wandb_run(cls, wandb_run: wandb.apis.public.Run) -> RunRecord:
         return cls(
-            **{k: data.get(k) for k in standard_fields},
-            raw_data={k: v for k, v in data.items() if k not in standard_fields},
+            run_id=wandb_run.id,
+            run_name=wandb_run.name,
+            state=wandb_run.state,
+            project=wandb_run.project,
+            entity=wandb_run.entity,
+            created_at=wandb_run.created_at,
+            config=dict(wandb_run.config),
+            summary=dict(wandb_run.summary._json_dict),  # noqa: SLF001
+            metadata=wandb_run.metadata or {},
+            system_metrics=wandb_run.system_metrics or {},
+            system_attrs=dict(wandb_run._attrs),  # noqa: SLF001
+            sweep_info={
+                "sweep_id": getattr(wandb_run, "sweep_id", None),
+                "sweep_url": getattr(wandb_run, "sweep_url", None),
+            },
         )
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            **{field: getattr(self, field) for field in self.get_standard_fields()},
-            **(self.raw_data if self.raw_data else {}),
-        }
+    def update_from_wandb_run(self, wandb_run: wandb.apis.public.Run) -> None:
+        updated = self.__class__.from_wandb_run(wandb_run)
+        for col in self.__table__.columns:
+            if col.name != "run_id":
+                setattr(self, col.name, getattr(updated, col.name))
 
-    def update_from_dict(self, data: dict[str, Any]) -> None:
-        standard_fields = self.get_standard_fields()
-        for field in standard_fields:
-            if field in data:
-                setattr(self, field, data[field])
-        self.raw_data = {k: v for k, v in data.items() if k not in standard_fields}
+    def to_dict(
+        self, include: list[RunDataComponent] | All | None = None
+    ) -> dict[str, Any]:
+        include = include or []
+        if "all" in include:
+            include = RUN_DATA_COMPONENTS
+        assert all(field in RUN_DATA_COMPONENTS for field in include)
+        data = {k: getattr(self, k) for k in self.standard_fields()}
+        for field in include:
+            data[field] = getattr(self, field)
+        return data
 
 
-class History(Base):
+class HistoryRecord(Base):
     __tablename__ = "wandb_history"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     run_id: Mapped[str]
     step: Mapped[int | None]
     timestamp: Mapped[datetime | None]
+    runtime: Mapped[int | None]
+    wandb_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB)
     metrics: Mapped[dict[str, Any]] = mapped_column(JSONB)
 
     @classmethod
-    def get_standard_fields(cls) -> list[str]:
+    def from_wandb_history(
+        cls, history_entry: dict[str, Any], run_id: str
+    ) -> HistoryRecord:
+        return cls(
+            run_id=run_id,
+            step=history_entry.get("_step"),
+            timestamp=history_entry.get("_timestamp"),
+            runtime=history_entry.get("_runtime"),
+            wandb_metadata=history_entry.get("_wandb", {}),
+            metrics={k: v for k, v in history_entry.items() if not k.startswith("_")},
+        )
+
+    @classmethod
+    def standard_fields(cls) -> list[str]:
         return [
             col.name
             for col in cls.__table__.columns
-            if col.name not in ["id", "metrics"]
+            if col.name not in ["wandb_metadata", "metrics"]
         ]
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> History:
-        standard_fields = [*cls.get_standard_fields(), "_step", "_timestamp"]
-        return cls(
-            run_id=data.get("run_id"),
-            step=data.get("_step"),
-            timestamp=extract_as_datetime(data, "_timestamp"),
-            metrics={k: v for k, v in data.items() if k not in standard_fields},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, include_metadata: bool = False) -> dict[str, Any]:
         return {
-            **{field: getattr(self, field) for field in self.get_standard_fields()},
-            **(self.metrics if self.metrics else {}),
+            **{field: getattr(self, field) for field in self.standard_fields()},
+            **self.metrics,
+            **({"wandb_metadata": self.wandb_metadata} if include_metadata else {}),
         }
 
 
-class Store:
+class ProjectStore:
     def __init__(self, connection_string: str, output_dir: str | None = None) -> None:
         self.engine: Engine = create_engine(connection_string)
         self.create_tables()
@@ -139,40 +140,50 @@ class Store:
     def create_tables(self) -> None:
         Base.metadata.create_all(self.engine)
 
-    def store_run(self, run_data: dict[str, Any]) -> None:
+    def store_run(self, run: wandb.apis.public.Run) -> None:
         with Session(self.engine) as session:
-            existing_run = session.get(Run, run_data["run_id"])
+            existing_run = session.get(RunRecord, run.id)
             if existing_run:
-                existing_run.update_from_dict(run_data)
+                existing_run.update_from_wandb_run(run)
             else:
-                session.add(Run.from_dict(run_data))
+                session.add(RunRecord.from_wandb_run(run))
             session.commit()
 
-    def store_history(self, run_id: str, history_data: list[dict[str, Any]]) -> None:
+    def store_history(self, run_id: str, history: wandb.apis.public.History) -> None:
         with Session(self.engine) as session:
             delete_history_for_run(session, run_id)
-            for step_data in history_data:
-                session.add(History.from_dict({"run_id": run_id, **step_data}))
+            for history_entry in history:
+                session.add(HistoryRecord.from_wandb_history(history_entry, run_id))
             session.commit()
 
-    def get_runs_df(self, kwargs: dict[str, Any] | None = None) -> pd.DataFrame:
+    def get_runs_df(
+        self,
+        include: list[RunDataComponent] | All | None = None,
+        kwargs: dict[str, Any] | None = None,
+    ) -> pd.DataFrame:
         with Session(self.engine) as session:
             result = session.execute(build_query("runs", kwargs=kwargs))
-            return pd.DataFrame([run.to_dict() for run in result.scalars().all()])
+            return pd.DataFrame(
+                [run.to_dict(include=include) for run in result.scalars().all()]
+            )
 
-    def get_history_df(self, kwargs: dict[str, Any] | None = None) -> pd.DataFrame:
+    def get_history_df(
+        self,
+        include_metadata: bool = False,
+        kwargs: dict[str, Any] | None = None,
+    ) -> pd.DataFrame:
         with Session(self.engine) as session:
             result = session.execute(build_query("history", kwargs=kwargs))
-            return pd.DataFrame(
-                [
-                    {
-                        "run_name": run_name,
-                        "project": project_name,
-                        **history.to_dict(),
-                    }
-                    for history, run_name, project_name in result.all()
-                ]
-            )
+        return pd.DataFrame(
+            [
+                {
+                    "run_name": run_name,
+                    "project": project_name,
+                    **history.to_dict(include_metadata=include_metadata),
+                }
+                for history, run_name, project_name in result.all()
+            ]
+        )
 
     def get_existing_run_states(
         self, kwargs: dict[str, Any] | None = None
