@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import wandb
 
-from dr_wandb.wandb_store import RunId, RunState, WandBStore
+from dr_wandb.store import RunId, RunState, Store
 
 
 def select_new_and_unfinished_runs(
@@ -17,10 +17,10 @@ def select_new_and_unfinished_runs(
     ]
 
 
-class WandbDownloader:
+class Downloader:
     def __init__(
         self,
-        store: WandBStore,
+        store: Store,
         runs_per_page: int = 500,
     ) -> None:
         self.store = store

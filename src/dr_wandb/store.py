@@ -19,27 +19,27 @@ type RunId = str
 type RunState = Literal["finished", "running", "crashed", "failed", "killed"]
 
 
-def build_wandb_query(
+def build_query(
     base_query: Literal["runs", "history"],
     kwargs: dict[str, Any] | None = None,
-) -> Select[WandBRun]:
+) -> Select[Run]:
     assert base_query in ["runs", "history"]
-    query = select(WandBRun)
+    query = select(Run)
     if base_query == "history":
-        query = select(WandBHistory, WandBRun.run_name, WandBRun.project).join(
-            WandBRun, WandBHistory.run_id == WandBRun.run_id
+        query = select(History, Run.run_name, Run.project).join(
+            Run, History.run_id == Run.run_id
         )
     if kwargs is not None:
         assert all(k in SELECT_FIELDS for k in kwargs)
         assert all(v is not None for v in kwargs.values())
         if "project" in kwargs:
-            query = query.where(WandBRun.project == kwargs["project"])
+            query = query.where(Run.project == kwargs["project"])
         if "entity" in kwargs:
-            query = query.where(WandBRun.entity == kwargs["entity"])
+            query = query.where(Run.entity == kwargs["entity"])
         if "state" in kwargs:
-            query = query.where(WandBRun.state == kwargs["state"])
+            query = query.where(Run.state == kwargs["state"])
         if "run_ids" in kwargs:
-            query = query.where(WandBRun.run_id.in_(kwargs["run_ids"]))
+            query = query.where(Run.run_id.in_(kwargs["run_ids"]))
     return query
 
 
@@ -58,7 +58,7 @@ class Base(DeclarativeBase):
     pass
 
 
-class WandBRun(Base):
+class Run(Base):
     __tablename__ = "wandb_runs"
 
     run_id: Mapped[RunId] = mapped_column(primary_key=True)
@@ -75,7 +75,7 @@ class WandBRun(Base):
         return [col.name for col in cls.__table__.columns if col.name != "raw_data"]
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> WandBRun:
+    def from_dict(cls, data: dict[str, Any]) -> Run:
         standard_fields = cls.get_standard_fields()
         return cls(
             **{k: data.get(k) for k in standard_fields},
@@ -96,7 +96,7 @@ class WandBRun(Base):
         self.raw_data = {k: v for k, v in data.items() if k not in standard_fields}
 
 
-class WandBHistory(Base):
+class History(Base):
     __tablename__ = "wandb_history"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -114,7 +114,7 @@ class WandBHistory(Base):
         ]
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> WandBHistory:
+    def from_dict(cls, data: dict[str, Any]) -> History:
         standard_fields = [*cls.get_standard_fields(), "_step", "_timestamp"]
         return cls(
             run_id=data.get("run_id"),
@@ -130,7 +130,7 @@ class WandBHistory(Base):
         }
 
 
-class WandBStore:
+class Store:
     def __init__(self, connection_string: str, output_dir: str | None = None) -> None:
         self.engine: Engine = create_engine(connection_string)
         self.create_tables()
@@ -141,28 +141,28 @@ class WandBStore:
 
     def store_run(self, run_data: dict[str, Any]) -> None:
         with Session(self.engine) as session:
-            existing_run = session.get(WandBRun, run_data["run_id"])
+            existing_run = session.get(Run, run_data["run_id"])
             if existing_run:
                 existing_run.update_from_dict(run_data)
             else:
-                session.add(WandBRun.from_dict(run_data))
+                session.add(Run.from_dict(run_data))
             session.commit()
 
     def store_history(self, run_id: str, history_data: list[dict[str, Any]]) -> None:
         with Session(self.engine) as session:
             delete_history_for_run(session, run_id)
             for step_data in history_data:
-                session.add(WandBHistory.from_dict({"run_id": run_id, **step_data}))
+                session.add(History.from_dict({"run_id": run_id, **step_data}))
             session.commit()
 
     def get_runs_df(self, kwargs: dict[str, Any] | None = None) -> pd.DataFrame:
         with Session(self.engine) as session:
-            result = session.execute(build_wandb_query("runs", kwargs=kwargs))
+            result = session.execute(build_query("runs", kwargs=kwargs))
             return pd.DataFrame([run.to_dict() for run in result.scalars().all()])
 
     def get_history_df(self, kwargs: dict[str, Any] | None = None) -> pd.DataFrame:
         with Session(self.engine) as session:
-            result = session.execute(build_wandb_query("history", kwargs=kwargs))
+            result = session.execute(build_query("history", kwargs=kwargs))
             return pd.DataFrame(
                 [
                     {
@@ -178,7 +178,7 @@ class WandBStore:
         self, kwargs: dict[str, Any] | None = None
     ) -> dict[str, str]:
         with Session(self.engine) as session:
-            result = session.execute(build_wandb_query("runs", kwargs=kwargs))
+            result = session.execute(build_query("runs", kwargs=kwargs))
             return {run.run_id: run.state for run in result.scalars().all()}
 
     def export_to_parquet(
