@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "pandas>=2.3.2",
     "psycopg2>=2.9.10",
+    "pyarrow>=21.0.0",
     "pydantic-settings>=2.10.1",
     "sqlalchemy>=2.0.43",
     "wandb>=0.21.4",
