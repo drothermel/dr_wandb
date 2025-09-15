@@ -1,6 +1,13 @@
 from collections.abc import Callable
 from typing import Literal
 
+from sqlalchemy.orm import DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    pass
+
+
 SUPPORTED_FILTER_FIELDS = ["project", "entity", "state", "run_ids"]
 type FilterField = Literal["project", "entity", "state", "run_ids"]
 
