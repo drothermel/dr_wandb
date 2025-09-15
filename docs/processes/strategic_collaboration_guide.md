@@ -1,0 +1,1 @@
+/Users/daniellerothermel/drotherm/repos/dr_ref/docs/processes/strategic_collaboration_guide.md
