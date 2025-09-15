@@ -7,7 +7,17 @@ authors = [
     { name = "Danielle Rothermel", email = "danielle.rothermel@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pandas>=2.3.2",
+    "psycopg2>=2.9.10",
+    "pyarrow>=21.0.0",
+    "pydantic-settings>=2.10.1",
+    "sqlalchemy>=2.0.43",
+    "wandb>=0.21.4",
+]
+
+[project.scripts]
+wandb-download = "dr_wandb.cli.download:download_project"
 
 [build-system]
 requires = ["hatchling"]
@@ -29,11 +39,10 @@ dev = [
 include = [
     "src/**/*.py",
     "scripts/**/*.py",
-    "tests/**/*.py",
 ]
 line-length = 88
 cache-dir = ".ruff_cache"
-exclude = ["outputs/*", "notebooks/*", "plots/*", "data/*", "docs/*"]
+exclude = ["outputs/*", "notebooks/*", "plots/*", "data/*", "docs/*", "tests/*"]
 
 [tool.ruff.format]
 indent-style = "space"
@@ -101,6 +110,7 @@ ignore = [
     "S101",                 # asserts for invariants
     "D203",                 # either D203 or D211
     "D213",                 # either D212 or D213
+    "INP001",               # don't need init warnings
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -123,9 +133,6 @@ ignore = [
     "E402",                 # Import order OK in notebooks
     "F401",                 # Unused imports OK in notebooks
 ]
-"examples/**" = [
-    "INP001",               # Examples are standalone scripts, not packages
-]  
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15         # Higher threshold for ML
