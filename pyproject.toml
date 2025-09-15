@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-wandb-download = "dr_wandb.scripts.download_project:download_project"
+wandb-download = "dr_wandb.cli.download:download_project"
 
 [build-system]
 requires = ["hatchling"]
