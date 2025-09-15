@@ -18,6 +18,17 @@ class ProjDownloadSettings(BaseSettings):
     runs_per_page: int = 500
 
 
+def validate_settings(entity: str | None, project: str | None) -> None:
+    if not entity:
+        raise click.ClickException(
+            "--entity is required, or set DR_WANDB_ENTITY in .env"
+        )
+    if not project:
+        raise click.ClickException(
+            "--project is required, or set DR_WANDB_PROJECT in .env"
+        )
+
+
 @click.command()
 @click.option(
     "--entity",
@@ -58,8 +69,7 @@ def download_project(
     final_project = project if project else cfg.project
     final_db_url = db_url if db_url else cfg.database_url
     final_output_dir = output_dir if output_dir else cfg.output_dir
-    if not final_entity or not final_project:
-        raise click.ClickException("--entity and --project are required")
+    validate_settings(final_entity, final_project)
 
     store = ProjectStore(
         final_db_url,
