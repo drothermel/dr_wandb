@@ -2,6 +2,8 @@
 
 A command-line utility for downloading and archiving Weights & Biases experiment data to local storage formats optimized for offline analysis. Stores to PostgreSQL db + Parquet files, supports incremental updates and selective data retrieval.
 
+> For shared context and onboarding steps, see the [Agent Guide](../dr_ref/docs/guides/AGENT_GUIDE_dr_wandb.md).
+
 ## Installation
 
 ```bash
@@ -105,4 +107,3 @@ The tool generates the following files in the output directory:
 - **runtime**: Elapsed time since run start
 - **wandb_metadata**: Platform logging metadata (JSONB)
 - **metrics**: All logged metrics and values (JSONB, flattened in Parquet export)
-
