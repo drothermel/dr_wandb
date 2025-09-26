@@ -102,6 +102,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "dr-wandb" },
     { name = "pytest" },
 ]
 
@@ -116,7 +117,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.4.1" }]
+dev = [
+    { name = "dr-wandb", editable = "." },
+    { name = "pytest", specifier = ">=8.4.1" },
+]
 
 [[package]]
 name = "gitdb"

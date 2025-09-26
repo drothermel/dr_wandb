@@ -32,6 +32,7 @@ packages = ["src/dr_wandb"]
 
 [dependency-groups]
 dev = [
+    "dr-wandb",
     "pytest>=8.4.1",
 ]
 
@@ -154,3 +155,6 @@ seaborn             = "sns"
 polars              = "pl"
 lightning			= "L"
 "jax.numpy" 	    = "jnp"
+
+[tool.uv.sources]
+dr-wandb = { workspace = true }
