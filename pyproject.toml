@@ -1,6 +1,6 @@
 [project]
 name = "dr-wandb"
-version = "0.1.1"
+version = "0.1.2"
 description = "Interact with wandb from python"
 readme = "README.md"
 authors = [
@@ -9,15 +9,14 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "pandas>=2.3.2",
-    "psycopg2>=2.9.10",
     "pyarrow>=21.0.0",
-    "pydantic-settings>=2.10.1",
-    "sqlalchemy>=2.0.43",
+    "typer>=0.20.0",
     "wandb>=0.21.4",
+    "sqlalchemy>=2.0.43",
 ]
 
 [project.scripts]
-wandb-download = "dr_wandb.cli.download:download_project"
+wandb-download = "dr_wandb.cli.download:app"
 
 [build-system]
 requires = ["hatchling"]
@@ -26,13 +25,24 @@ build-backend = "hatchling.build"
 [tool.hatch.metadata]
 allow-direct-references = true
 
+[tool.hatch.build]
+exclude = [
+  "docs",
+  "docs/**",
+]
+
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/dr_wandb"]
 
 
 [dependency-groups]
 dev = [
+    "dr-wandb",
     "pytest>=8.4.1",
+]
+postgres = [
+    "pydantic-settings>=2.10.1",
 ]
 
 [tool.ruff]
@@ -154,3 +164,6 @@ seaborn             = "sns"
 polars              = "pl"
 lightning			= "L"
 "jax.numpy" 	    = "jnp"
+
+[tool.uv.sources]
+dr-wandb = { workspace = true }

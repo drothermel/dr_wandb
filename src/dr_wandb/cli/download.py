@@ -1,22 +1,52 @@
+from typing import Any
 import logging
+from pydantic import BaseModel, Field, computed_field
 from pathlib import Path
+import typer
+import pickle
 
-import click
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from dr_wandb.fetch import fetch_project_runs
 
-from dr_wandb.downloader import Downloader
-from dr_wandb.store import ProjectStore
+app = typer.Typer()
 
-
-class ProjDownloadSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="DR_WANDB_")
-
-    entity: str | None = None
-    project: str | None = None
-    database_url: str = "postgresql+psycopg2://localhost/wandb"
-    output_dir: Path = Path(__file__).parent.parent / "data"
+class ProjDownloadConfig(BaseModel):
+    entity: str
+    project: str
+    output_dir: Path = Field(
+        default_factory=lambda: (
+            Path(__file__).parent.parent.parent.parent / "data"
+        )
+    )
+    runs_only: bool = False
     runs_per_page: int = 500
+    log_every: int = 20
 
+    runs_output_filename: str = Field(
+        default_factory=lambda data: (
+            f"{data['entity']}_{data['project']}_runs.pkl"
+        )
+    )
+    histories_output_filename: str = Field(
+        default_factory=lambda data: (
+            f"{data['entity']}_{data['project']}_histories.pkl"
+        )
+    )
+
+    def progress_callback(self, run_index: int, total_runs: int, message: str)-> None:
+        if run_index % self.log_every == 0:
+            logging.info(f">> {run_index}/{total_runs}: {message}")
+
+
+    @computed_field
+    @property
+    def fetch_runs_cfg(self) -> dict[str, Any]:
+        return {
+            "entity": self.entity,
+            "project": self.project,
+            "runs_per_page": self.runs_per_page,
+            "progress_callback": self.progress_callback,
+            "include_history": not self.runs_only,
+        }
 
 def setup_logging(level: str = "INFO") -> None:
     logging.basicConfig(
@@ -26,103 +56,42 @@ def setup_logging(level: str = "INFO") -> None:
     )
 
 
-def validate_settings(entity: str | None, project: str | None) -> None:
-    if not entity:
-        raise click.ClickException(
-            "--entity is required, or set DR_WANDB_ENTITY in .env"
-        )
-    if not project:
-        raise click.ClickException(
-            "--project is required, or set DR_WANDB_PROJECT in .env"
-        )
-
-
-def resolve_config(
-    entity: str | None,
-    project: str | None,
-    db_url: str | None,
-    output_dir: str | None,
-) -> ProjDownloadSettings:
-    cfg = ProjDownloadSettings()
-    final_entity = entity if entity else cfg.entity
-    final_project = project if project else cfg.project
-    final_db_url = db_url if db_url else cfg.database_url
-    final_output_dir = output_dir if output_dir else cfg.output_dir
-    validate_settings(final_entity, final_project)
-    return ProjDownloadSettings(
-        entity=final_entity,
-        project=final_project,
-        database_url=final_db_url,
-        output_dir=final_output_dir,
-        runs_per_page=cfg.runs_per_page,
-    )
-
-
-def execute_download(
-    cfg: ProjDownloadSettings, runs_only: bool, force_refresh: bool
-) -> None:
-    store = ProjectStore(
-        cfg.database_url,
-        output_dir=cfg.output_dir,
-    )
-    downloader = Downloader(store, runs_per_page=cfg.runs_per_page)
-    click.echo(">> Beginning download:")
-    stats = downloader.download_project(
-        entity=cfg.entity,
-        project=cfg.project,
-        runs_only=runs_only,
-        force_refresh=force_refresh,
-    )
-    click.echo(str(stats))
-    return downloader
-
-
-@click.command()
-@click.option(
-    "--entity",
-    envvar="DR_WANDB_ENTITY",
-    help="WandB entity (username or team name)",
-)
-@click.option("--project", envvar="DR_WANDB_PROJECT", help="WandB project name")
-@click.option(
-    "--runs-only",
-    is_flag=True,
-    help="Only download runs, don't download history",
-)
-@click.option(
-    "--force-refresh",
-    is_flag=True,
-    help="Force refresh, download all data",
-)
-@click.option(
-    "--db-url",
-    envvar="DR_WANDB_DATABASE_URL",
-    help="PostgreSQL connection string",
-)
-@click.option(
-    "--output-dir",
-    envvar="DR_WANDB_OUTPUT_DIR",
-    help="Output directory",
-)
+@app.command()
 def download_project(
-    entity: str | None,
-    project: str | None,
-    runs_only: bool,
-    force_refresh: bool,
-    db_url: str | None,
-    output_dir: str | None,
+    entity: str,
+    project: str,
+    output_dir: str,
+    runs_only: bool = False,
+    runs_per_page: int = 500,
+    log_every: int = 20,
 ) -> None:
     setup_logging()
-    click.echo("\n:: Beginning Dr. Wandb Project Downloading Tool ::\n")
-    cfg = resolve_config(entity, project, db_url, output_dir)
-    click.echo(f">> Downloading project {cfg.entity}/{cfg.project}")
-    click.echo(f">> Database: {cfg.database_url}")
-    click.echo(f">> Output directory: {cfg.output_dir}")
-    click.echo(f">> Force refresh: {force_refresh} Runs only: {runs_only}")
-    click.echo()
-    downloader = execute_download(cfg, runs_only, force_refresh)
-    downloader.write_downloaded_to_parquet()
+    logging.info("\n:: Beginning Dr. Wandb Project Downloading Tool ::\n")
+
+    cfg = ProjDownloadConfig(
+        entity=entity,
+        project=project,
+        output_dir=output_dir,
+        runs_only=runs_only,
+        runs_per_page=runs_per_page,
+        log_every=log_every,
+    )
+    logging.info(str(cfg.model_dump_json(indent=4, exclude="fetch_runs_cfg")))
+    logging.info("")
+
+    runs, histories = fetch_project_runs(**cfg.fetch_runs_cfg)
+    runs_filename = f"{output_dir}/{cfg.runs_output_filename}"
+    histories_filename = f"{output_dir}/{cfg.histories_output_filename}"
+    with open(runs_filename, 'wb') as run_file:
+        pickle.dump(runs, run_file)
+    logging.info(f">> Dumped runs data to: {runs_filename}")
+    if not cfg.runs_only:
+        with open(histories_filename, 'wb') as hist_file:
+            pickle.dump(histories, hist_file)
+        logging.info(f">> Dumped histories data to: {histories_filename}")
+    else:
+        logging.info(f">> Runs only, not dumping histories to: {histories_filename}")
 
 
 if __name__ == "__main__":
-    download_project()
+    app()
