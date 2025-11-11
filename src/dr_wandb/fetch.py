@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 import wandb
+import logging
 
 from dr_wandb.history_entry_record import HistoryEntryRecord
 from dr_wandb.run_record import RunRecord
@@ -62,9 +63,12 @@ def fetch_project_runs(
     runs: list[dict[str, Any]] = []
     histories: list[list[dict[str, Any]]] = []
 
+    logging.info(">> Downloading runs, this will take a while (minutes)")
     run_iter = list(_iterate_runs(entity, project, runs_per_page=runs_per_page))
     total = len(run_iter)
+    logging.info(f"  - total runs found: {total}")
 
+    logging.info(f">> Serializing runs and maybe getting histories: {include_history}")
     for index, run in enumerate(run_iter, start=1):
         runs.append(serialize_run(run))
         if include_history:

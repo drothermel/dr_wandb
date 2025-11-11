@@ -1,21 +1,20 @@
 # dr_wandb
 
-A command-line utility for downloading and archiving Weights & Biases experiment data to local storage formats optimized for offline analysis. Stores to PostgreSQL db + Parquet files, supports incremental updates and selective data retrieval.
+A command-line utility for downloading and archiving Weights & Biases experiment data to local storage formats optimized for offline analysis. 
 
-> For shared context and onboarding steps, see the [Agent Guide](../dr_ref/docs/guides/AGENT_GUIDE_dr_wandb.md).
 
 ## Installation
 
 ```bash
-uv add dr_wandb
+# To use the library functions
+uv add dr_wandb # Optionally: dr_wandb[postgres]
+uv sync
+
+# Quickstart: just use as cli tool
+uv tool install dr_wandb
+
+# installs: wandb-download
 ```
-
-### Prerequisites
-
-- Python 3.12 or higher
-- PostgreSQL database server
-- Weights & Biases account with API access
-- PyArrow for Parquet file operations
 
 ### Authentication
 
@@ -31,12 +30,66 @@ Or set the API key as an environment variable:
 export WANDB_API_KEY=your_api_key_here
 ```
 
-## Basic Usage
+## Quickstart
 
-Download all runs from a Weights & Biases project:
+The default approach doesn't involve postgres. It fetches the runs, and optionally histories, and dumps them to local pkl files.  
 
 ```bash
-wandb-download --entity your_entity --project your_project
+» wandb-download --help
+
+ Usage: wandb-download [OPTIONS] ENTITY PROJECT OUTPUT_DIR
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ *    entity          TEXT  [required]                                                                                                                            │
+│ *    project         TEXT  [required]                                                                                                                            │
+│ *    output_dir      TEXT  [required]                                                                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --runs-only             --no-runs-only             [default: no-runs-only]                                                                                       │
+│ --runs-per-page                           INTEGER  [default: 500]                                                                                                │
+│ --log-every                               INTEGER  [default: 20]                                                                                                 │
+│ --install-completion                               Install completion for the current shell.                                                                     │
+│ --show-completion                                  Show completion for the current shell, to copy it or customize the installation.                              │
+│ --help                                             Show this message and exit.                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+An example:
+```bash
+» wandb-download --runs-only "ml-moe" "ft-scaling" "./data"                                          1 ↵
+2025-11-10 21:47:54 - INFO -
+:: Beginning Dr. Wandb Project Downloading Tool ::
+
+2025-11-10 21:47:54 - INFO - {
+    "entity": "ml-me",
+    "project": "scaling",
+    "output_dir": "data",
+    "runs_only": true,
+    "runs_per_page": 500,
+    "log_every": 20,
+    "runs_output_filename": "ml-me_scaling_runs.pkl",
+    "histories_output_filename": "ml-me_scaling_histories.pkl"
+}
+2025-11-10 21:47:54 - INFO -
+2025-11-10 21:47:54 - INFO - >> Downloading runs, this will take a while (minutes)
+wandb: Currently logged in as: danielle-rothermel (ml-moe) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+2025-11-10 21:48:00 - INFO -   - total runs found: 517
+2025-11-10 21:48:00 - INFO - >> Serializing runs and maybe getting histories: False
+2025-11-10 21:48:07 - INFO - >> 20/517: 2025_08_21-08_24_43_test_finetune_DD-dolma1_7-10M_main_1Mtx1_--learning_rate=5e-05
+2025-11-10 21:48:12 - INFO - >> 40/517: 2025_08_21-08_24_43_test_finetune_DD-dolma1_7-150M_main_10Mtx1_--learning_rate=5e-06
+...
+2025-11-10 21:50:46 - INFO - >> Dumped runs data to: ./data/ml-moe_ft-scaling_runs.pkl
+2025-11-10 21:50:46 - INFO - >> Runs only, not dumping histories to: ./data/ml-moe_ft-scaling_histories.pkl
+```
+
+
+
+## Very Alpha: Postgres Version
+
+**Its very likely this won't currently work.**  Download all runs from a Weights & Biases project:
+
+```bash
+uv run python src/dr_wandb/cli/postres_download.py --entity your_entity --project your_project
 
 Options:
   --entity TEXT        WandB entity (username or team name)
@@ -76,7 +129,7 @@ postgresql+psycopg2://username:password@host:port/database_name
 
 If the specified database does not exist, the tool will attempt to create it automatically.
 
-## Data Schema
+### Data Schema
 
 
 The tool generates the following files in the output directory:
