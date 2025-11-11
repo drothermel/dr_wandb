@@ -5,15 +5,18 @@ A command-line utility for downloading and archiving Weights & Biases experiment
 
 ## Installation
 
+CLI Tool Install: `wandb-downloader`
+```
+uv tool install dr_wandb
+```
+
+Or, to use the library functions
 ```bash
 # To use the library functions
-uv add dr_wandb # Optionally: dr_wandb[postgres]
+uv add dr_wandb
+# Optionally
+uv add dr_wandb[postgres]
 uv sync
-
-# Quickstart: just use as cli tool
-uv tool install dr_wandb
-
-# installs: wandb-download
 ```
 
 ### Authentication
