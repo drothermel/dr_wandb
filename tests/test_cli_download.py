@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from dr_wandb.cli.download import ProjDownloadConfig
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
+import pandas as pd
+import pytest
+
+from dr_wandb.cli.download import ProjDownloadConfig, download_project
 
 
 class TestProjDownloadConfigFilenames:
@@ -77,3 +84,87 @@ class TestProjDownloadConfigFetchRunsCfg:
             runs_per_page=100,
         )
         assert cfg.fetch_runs_cfg["runs_per_page"] == 100
+
+
+class TestDownloadProjectParquetHistories:
+    """Test the incremental parquet saving logic for histories."""
+
+    def test_parquet_saves_histories_incrementally(self):
+        """Test that histories from multiple runs are combined correctly."""
+        runs = [
+            {"run_id": "run_1", "name": "run1"},
+            {"run_id": "run_2", "name": "run2"},
+        ]
+        histories = [
+            [{"run_id": "run_1", "step": i, "loss": 0.5 - i * 0.1} for i in range(3)],
+            [{"run_id": "run_2", "step": i, "loss": 0.4 - i * 0.1} for i in range(2)],
+        ]
+
+        with TemporaryDirectory() as tmpdir:
+            with patch("dr_wandb.cli.download.fetch_project_runs") as mock_fetch:
+                mock_fetch.return_value = (runs, histories)
+                download_project(
+                    entity="test_entity",
+                    project="test_project",
+                    output_dir=tmpdir,
+                    output_format="parquet",
+                    runs_only=False,
+                )
+
+            # Verify histories file was created and contains all entries
+            histories_file = Path(tmpdir) / "test_entity_test_project_histories.parquet"
+            assert histories_file.exists()
+
+            df = pd.read_parquet(histories_file)
+            assert len(df) == 5  # 3 + 2 entries
+            assert set(df["run_id"].unique()) == {"run_1", "run_2"}
+
+    def test_parquet_skips_empty_histories(self):
+        """Test that empty histories are not saved."""
+        runs = [
+            {"run_id": "run_1", "name": "run1"},
+            {"run_id": "run_2", "name": "run2"},
+        ]
+        histories = [
+            [],  # Empty history
+            [{"run_id": "run_2", "step": 0, "loss": 0.5}],
+        ]
+
+        with TemporaryDirectory() as tmpdir:
+            with patch("dr_wandb.cli.download.fetch_project_runs") as mock_fetch:
+                mock_fetch.return_value = (runs, histories)
+                download_project(
+                    entity="test_entity",
+                    project="test_project",
+                    output_dir=tmpdir,
+                    output_format="parquet",
+                    runs_only=False,
+                )
+
+            # Verify histories file was created with only non-empty entries
+            histories_file = Path(tmpdir) / "test_entity_test_project_histories.parquet"
+            assert histories_file.exists()
+
+            df = pd.read_parquet(histories_file)
+            assert len(df) == 1
+            assert df["run_id"].iloc[0] == "run_2"
+
+    def test_parquet_no_histories_file_when_all_empty(self):
+        """Test that no histories file is created when all histories are empty."""
+        runs = [{"run_id": "run_1", "name": "run1"}]
+        histories = [[]]  # All empty
+
+        with TemporaryDirectory() as tmpdir:
+            with patch("dr_wandb.cli.download.fetch_project_runs") as mock_fetch:
+                mock_fetch.return_value = (runs, histories)
+                download_project(
+                    entity="test_entity",
+                    project="test_project",
+                    output_dir=tmpdir,
+                    output_format="parquet",
+                    runs_only=False,
+                )
+
+            # Verify histories file was NOT created
+            histories_file = Path(tmpdir) / "test_entity_test_project_histories.parquet"
+            assert not histories_file.exists()

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
 def _extract_timestamp(raw: float | None) -> datetime | None:
-    return datetime.fromtimestamp(raw) if raw is not None else None
+    return datetime.fromtimestamp(raw, tz=timezone.utc) if raw is not None else None
 
 
 class HistoryEntryRecord(BaseModel):

@@ -122,9 +122,17 @@ def download_project(
         save_as_parquet(runs, runs_file)
         logging.info(f">> Saved runs to: {runs_file}")
         if not cfg.runs_only:
-            all_history = [h for run_hist in histories for h in run_hist]
-            save_as_parquet(all_history, histories_file)
-            logging.info(f">> Saved histories to: {histories_file}")
+            # Process histories incrementally to avoid memory issues
+            history_dfs = []
+            for run_hist in histories:
+                if run_hist:  # Only process non-empty histories
+                    df = pd.DataFrame(run_hist)
+                    df = safe_convert_for_parquet(df)
+                    history_dfs.append(df)
+            if history_dfs:
+                combined_df = pd.concat(history_dfs, ignore_index=True)
+                combined_df.to_parquet(histories_file)
+                logging.info(f">> Saved histories to: {histories_file}")
     else:
         save_as_pickle(runs, runs_file)
         logging.info(f">> Saved runs to: {runs_file}")
