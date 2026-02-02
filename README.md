@@ -121,9 +121,9 @@ json_str = record.model_dump_json()  # Get as JSON string
 | Field | Type | Description |
 |-------|------|-------------|
 | run_id | str | Parent run identifier |
-| step | int | Training step number |
-| timestamp | datetime | Time of logging |
-| runtime | int | Seconds since run start |
+| step | int \| None | Training step number |
+| timestamp | datetime \| None | Time of logging |
+| runtime | int \| None | Seconds since run start |
 | wandb_metadata | dict | Platform logging metadata |
 | metrics | dict | All logged metrics |
 
