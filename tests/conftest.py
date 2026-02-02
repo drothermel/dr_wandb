@@ -78,13 +78,3 @@ def sample_history_entries():
         }
         for i in range(5)
     ]
-
-
-@pytest.fixture
-def sample_run_states():
-    return {
-        "finished_run": "finished",
-        "running_run": "running",
-        "crashed_run": "crashed",
-        "failed_run": "failed",
-    }

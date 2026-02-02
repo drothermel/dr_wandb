@@ -2,31 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pandas as pd
 
-if TYPE_CHECKING:
-    import wandb
-
 MAX_INT = 2**31 - 1
-
-
-def extract_as_datetime(data: dict[str, Any], key: str) -> datetime | None:
-    timestamp = data.get(key)
-    return datetime.fromtimestamp(timestamp) if timestamp is not None else None
-
-
-def select_updated_runs(
-    all_runs: list[wandb.apis.public.Run],
-    existing_run_states: dict[str, str],
-) -> list[wandb.apis.public.Run]:
-    return [
-        run
-        for run in all_runs
-        if run.id not in existing_run_states or existing_run_states[run.id] == "running"
-    ]
 
 
 def default_progress_callback(run_index: int, total_runs: int, message: str) -> None:
