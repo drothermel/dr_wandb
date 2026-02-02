@@ -45,7 +45,10 @@ def find_project_root(
 
 
 def default_progress_callback(run_index: int, total_runs: int, message: str) -> None:
-    logging.info(f">> {run_index}/{total_runs}: {message}")
+    if total_runs == -1:
+        logging.info(f">> {run_index}/?: {message}")
+    else:
+        logging.info(f">> {run_index}/{total_runs}: {message}")
 
 
 def convert_large_ints_in_data(data: Any, max_int: int = MAX_INT) -> Any:

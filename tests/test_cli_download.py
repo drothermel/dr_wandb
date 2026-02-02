@@ -149,8 +149,8 @@ class TestDownloadProjectParquetHistories:
             assert len(df) == 1
             assert df["run_id"].iloc[0] == "run_2"
 
-    def test_parquet_no_histories_file_when_all_empty(self):
-        """Test that no histories file is created when all histories are empty."""
+    def test_parquet_creates_empty_histories_file_when_all_empty(self):
+        """Test that an empty histories file is created when all histories are empty for consistency with pickle format."""
         runs = [{"run_id": "run_1", "name": "run1"}]
         histories = [[]]  # All empty
 
@@ -165,6 +165,10 @@ class TestDownloadProjectParquetHistories:
                     runs_only=False,
                 )
 
-            # Verify histories file was NOT created
+            # Verify empty histories file was created for consistency with pickle format
             histories_file = Path(tmpdir) / "test_entity_test_project_histories.parquet"
-            assert not histories_file.exists()
+            assert histories_file.exists()
+            
+            # Verify the file contains an empty DataFrame
+            df = pd.read_parquet(histories_file)
+            assert len(df) == 0

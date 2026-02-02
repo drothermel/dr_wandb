@@ -76,8 +76,8 @@ def fetch_project_runs(
             ]
             histories.append(history_payloads)
 
-        # Use current count as total if we don't have the actual total
-        progress_total = total if total is not None else run_count
+        # Use -1 as sentinel value to indicate unknown total when total is not available
+        progress_total = total if total is not None else -1
         progress(run_count, progress_total, run.name)
 
     # Update total if we didn't have it initially

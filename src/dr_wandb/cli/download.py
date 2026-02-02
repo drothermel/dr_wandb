@@ -129,10 +129,16 @@ def download_project(
                     df = pd.DataFrame(run_hist)
                     df = safe_convert_for_parquet(df)
                     history_dfs.append(df)
+            # Always create history file for consistency with pickle format
             if history_dfs:
                 combined_df = pd.concat(history_dfs, ignore_index=True)
                 combined_df.to_parquet(histories_file)
                 logging.info(f">> Saved histories to: {histories_file}")
+            else:
+                # Create empty parquet file to match pickle format behavior
+                empty_df = pd.DataFrame()
+                empty_df.to_parquet(histories_file)
+                logging.info(f">> Saved empty histories to: {histories_file}")
     else:
         save_as_pickle(runs, runs_file)
         logging.info(f">> Saved runs to: {runs_file}")
