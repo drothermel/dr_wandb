@@ -53,7 +53,7 @@ class RunRecord(BaseModel):
             project=wandb_run.project,
             entity=wandb_run.entity,
             created_at=wandb_run.created_at,
-            config=dict(wandb_run.config),
+            config=dict(wandb_run.config) if wandb_run.config else {},
             summary=summary_dict,
             wandb_metadata=wandb_run.metadata or {},
             system_metrics=wandb_run.system_metrics or {},

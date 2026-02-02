@@ -44,8 +44,8 @@ def find_project_root(
     return Path.cwd()
 
 
-def default_progress_callback(run_index: int, total_runs: int, message: str) -> None:
-    if total_runs == -1:
+def default_progress_callback(run_index: int, total_runs: int | None, message: str) -> None:
+    if total_runs is None:
         logging.info(f">> {run_index}/?: {message}")
     else:
         logging.info(f">> {run_index}/{total_runs}: {message}")

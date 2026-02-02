@@ -55,9 +55,9 @@ def test_fetch_project_runs_with_history(mock_wandb_run, sample_history_entries)
 
 
 def test_fetch_project_runs_without_history(mock_wandb_run):
-    progress_calls: list[tuple[int, int, str]] = []
+    progress_calls: list[tuple[int, int | None, str]] = []
 
-    def progress(idx: int, total: int, name: str) -> None:
+    def progress(idx: int, total: int | None, name: str) -> None:
         progress_calls.append((idx, total, name))
 
     # Create a mock Runs object that is iterable
@@ -82,10 +82,10 @@ def test_fetch_project_runs_without_history(mock_wandb_run):
 
 
 def test_fetch_project_runs_progress_with_unknown_total(mock_wandb_run):
-    """Test that progress callback uses -1 as sentinel when total is not available."""
-    progress_calls: list[tuple[int, int, str]] = []
+    """Test that progress callback uses None when total is not available."""
+    progress_calls: list[tuple[int, int | None, str]] = []
 
-    def progress(idx: int, total: int, name: str) -> None:
+    def progress(idx: int, total: int | None, name: str) -> None:
         progress_calls.append((idx, total, name))
 
     # Create a mock Runs object and set total to None to simulate API not providing it
@@ -96,7 +96,7 @@ def test_fetch_project_runs_progress_with_unknown_total(mock_wandb_run):
         mock_api_instance.runs.return_value = mock_runs_obj
         mock_api.return_value = mock_api_instance
 
-        runs, histories = fetch_project_runs(
+        runs, _histories = fetch_project_runs(
             "test_entity",
             "test_project",
             include_history=False,
@@ -104,5 +104,5 @@ def test_fetch_project_runs_progress_with_unknown_total(mock_wandb_run):
         )
 
     assert len(runs) == 1
-    # Verify progress callback was called with -1 as sentinel for unknown total
-    assert progress_calls == [(1, -1, mock_wandb_run.name)]
+    # Verify progress callback was called with None for unknown total
+    assert progress_calls == [(1, None, mock_wandb_run.name)]

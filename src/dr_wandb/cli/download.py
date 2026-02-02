@@ -50,9 +50,14 @@ class ProjDownloadConfig(BaseModel):
     def histories_output_filename(self) -> str:
         return f"{self.entity}_{self.project}_histories.{self.output_extension}"
 
-    def progress_callback(self, run_index: int, total_runs: int, message: str) -> None:
+    def progress_callback(
+        self, run_index: int, total_runs: int | None, message: str
+    ) -> None:
         if run_index % self.log_every == 0:
-            logging.info(f">> {run_index}/{total_runs}: {message}")
+            if total_runs is None:
+                logging.info(f">> {run_index}/?: {message}")
+            else:
+                logging.info(f">> {run_index}/{total_runs}: {message}")
 
     @computed_field
     @property

@@ -10,7 +10,7 @@ from dr_wandb.history_entry_record import HistoryEntryRecord
 from dr_wandb.run_record import RunRecord
 from dr_wandb.utils import default_progress_callback
 
-ProgressFn = Callable[[int, int, str], None]
+ProgressFn = Callable[[int, int | None, str], None]
 
 
 def _iterate_runs(
@@ -76,9 +76,8 @@ def fetch_project_runs(
             ]
             histories.append(history_payloads)
 
-        # Use -1 as sentinel value to indicate unknown total when total is not available
-        progress_total = total if total is not None else -1
-        progress(run_count, progress_total, run.name)
+        # Use None to indicate unknown total when total is not available
+        progress(run_count, total, run.name)
 
     # Update total if we didn't have it initially
     if total is None:
