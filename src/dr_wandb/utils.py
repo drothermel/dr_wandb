@@ -1,32 +1,54 @@
+from __future__ import annotations
+
 import json
 import logging
-from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import wandb
 
-from dr_wandb.constants import MAX_INT, RunId, RunState
-
-
-def extract_as_datetime(data: dict[str, Any], key: str) -> datetime | None:
-    timestamp = data.get(key)
-    return datetime.fromtimestamp(timestamp) if timestamp is not None else None
+MAX_INT = 2**31 - 1
 
 
-def select_updated_runs(
-    all_runs: list[wandb.apis.public.Run],
-    existing_run_states: dict[RunId, RunState],
-) -> list[wandb.apis.public.Run]:
-    return [
-        run
-        for run in all_runs
-        if run.id not in existing_run_states or existing_run_states[run.id] == "running"
-    ]
+def find_project_root(
+    marker_files: list[str] | None = None, start_path: Path | None = None
+) -> Path:
+    """Find the project root by walking up from a starting path until a marker file is found.
+
+    Args:
+        marker_files: List of marker file names to look for. Defaults to ['pyproject.toml', 'setup.cfg'].
+        start_path: Starting directory to search from. If None, uses Path.cwd().
+
+    Returns:
+        Path to the project root directory. Falls back to Path.cwd() if no marker is found.
+    """
+    if marker_files is None:
+        marker_files = ["pyproject.toml", "setup.cfg"]
+
+    if start_path is None:
+        start_path = Path.cwd()
+    else:
+        start_path = Path(start_path)
+
+    current = start_path.resolve()
+
+    # Walk up the directory tree
+    while current != current.parent:
+        # Check if any marker file exists in current directory
+        for marker in marker_files:
+            if (current / marker).exists():
+                return current
+        current = current.parent
+
+    # Fall back to cwd if no marker found
+    return Path.cwd()
 
 
-def default_progress_callback(run_index: int, total_runs: int, message: str) -> None:
-    logging.info(f">> {run_index}/{total_runs}: {message}")
+def default_progress_callback(run_index: int, total_runs: int | None, message: str) -> None:
+    if total_runs is None:
+        logging.info(f">> {run_index}/?: {message}")
+    else:
+        logging.info(f">> {run_index}/{total_runs}: {message}")
 
 
 def convert_large_ints_in_data(data: Any, max_int: int = MAX_INT) -> Any:

@@ -1,85 +1,100 @@
 from __future__ import annotations
 
-from datetime import datetime
-from unittest.mock import Mock
+import pandas as pd
+
+from dr_wandb.utils import MAX_INT, convert_large_ints_in_data, safe_convert_for_parquet
 
 
-from dr_wandb.utils import extract_as_datetime, select_updated_runs
+class TestConvertLargeIntsInData:
+    def test_returns_small_int_unchanged(self):
+        assert convert_large_ints_in_data(100) == 100
+        assert convert_large_ints_in_data(-100) == -100
+
+    def test_converts_large_positive_int_to_float(self):
+        large_int = MAX_INT + 1
+        result = convert_large_ints_in_data(large_int)
+        assert isinstance(result, float)
+        assert result == float(large_int)
+
+    def test_converts_large_negative_int_to_float(self):
+        large_negative = -(MAX_INT + 1)
+        result = convert_large_ints_in_data(large_negative)
+        assert isinstance(result, float)
+        assert result == float(large_negative)
+
+    def test_handles_nested_dict(self):
+        data = {"a": 1, "b": {"c": MAX_INT + 1, "d": 2}}
+        result = convert_large_ints_in_data(data)
+        assert result["a"] == 1
+        assert isinstance(result["b"]["c"], float)
+        assert result["b"]["d"] == 2
+
+    def test_handles_nested_list(self):
+        data = [1, MAX_INT + 1, [MAX_INT + 2, 3]]
+        result = convert_large_ints_in_data(data)
+        assert result[0] == 1
+        assert isinstance(result[1], float)
+        assert isinstance(result[2][0], float)
+        assert result[2][1] == 3
+
+    def test_handles_mixed_nested_structure(self):
+        data = {"items": [{"value": MAX_INT + 1}, {"value": 5}]}
+        result = convert_large_ints_in_data(data)
+        assert isinstance(result["items"][0]["value"], float)
+        assert result["items"][1]["value"] == 5
+
+    def test_preserves_non_int_types(self):
+        data = {"str": "hello", "float": 3.14, "none": None, "bool": True}
+        result = convert_large_ints_in_data(data)
+        assert result == data
+
+    def test_boundary_value_at_max_int(self):
+        assert convert_large_ints_in_data(MAX_INT) == MAX_INT
+        assert isinstance(convert_large_ints_in_data(MAX_INT + 1), float)
 
 
-class TestExtractAsDatetime:
-    def test_extracts_valid_timestamp(self):
-        data = {"timestamp": 1705312200.0}  # 2024-01-15 10:30:00 UTC
-        result = extract_as_datetime(data, "timestamp")
-        # Just check that we get a datetime object, not exact time due to timezone conversion
-        assert isinstance(result, datetime)
-        assert result.year == 2024
-        assert result.month == 1
-        assert result.day == 15
+class TestSafeConvertForParquet:
+    def test_converts_large_int64_to_float64(self):
+        df = pd.DataFrame({"col": [1, 2, MAX_INT + 1]})
+        result = safe_convert_for_parquet(df)
+        assert result["col"].dtype == "float64"
 
-    def test_returns_none_for_missing_key(self):
-        data = {"other_key": "value"}
-        result = extract_as_datetime(data, "timestamp")
-        assert result is None
+    def test_preserves_small_int64(self):
+        df = pd.DataFrame({"col": [1, 2, 3]})
+        result = safe_convert_for_parquet(df)
+        assert result["col"].dtype == "int64"
 
-    def test_returns_none_for_none_value(self):
-        data = {"timestamp": None}
-        result = extract_as_datetime(data, "timestamp")
-        assert result is None
+    def test_converts_dict_in_object_column_to_json(self):
+        df = pd.DataFrame({"col": [{"a": 1}, {"b": 2}]})
+        result = safe_convert_for_parquet(df)
+        assert result["col"].iloc[0] == '{"a": 1}'
+        assert result["col"].iloc[1] == '{"b": 2}'
 
-    def test_returns_none_for_zero_timestamp(self):
-        data = {"timestamp": 0}
-        result = extract_as_datetime(data, "timestamp")
-        # Zero timestamp actually converts to epoch time, so we get a datetime
-        # Let's test that it's not None but is epoch time
-        assert result is not None
-        assert result.year == 1969 or result.year == 1970  # Depends on timezone
+    def test_converts_list_in_object_column_to_json(self):
+        df = pd.DataFrame({"col": [[1, 2], [3, 4]]})
+        result = safe_convert_for_parquet(df)
+        assert result["col"].iloc[0] == "[1, 2]"
+        assert result["col"].iloc[1] == "[3, 4]"
 
+    def test_converts_string_in_object_column(self):
+        df = pd.DataFrame({"col": ["hello", "world"]})
+        result = safe_convert_for_parquet(df)
+        assert result["col"].iloc[0] == "hello"
+        assert result["col"].iloc[1] == "world"
 
-class TestSelectUpdatedRuns:
-    def test_selects_new_runs(self, sample_run_states):
-        # Create mock runs with IDs not in existing states
-        new_run = Mock(id="new_run_id")
-        all_runs = [new_run]
+    def test_preserves_none_in_object_column(self):
+        df = pd.DataFrame({"col": [{"a": 1}, None]})
+        result = safe_convert_for_parquet(df)
+        assert result["col"].iloc[0] == '{"a": 1}'
+        assert result["col"].iloc[1] is None
 
-        result = select_updated_runs(all_runs, sample_run_states)
-        assert result == [new_run]
+    def test_handles_large_int_inside_dict(self):
+        df = pd.DataFrame({"col": [{"big": MAX_INT + 1}]})
+        result = safe_convert_for_parquet(df)
+        assert f"{float(MAX_INT + 1)}" in result["col"].iloc[0]
 
-    def test_selects_running_runs(self, sample_run_states):
-        # Based on updated logic: only selects new runs or running runs
-        running_run = Mock(id="running_run")
-        crashed_run = Mock(id="crashed_run")
-        all_runs = [running_run, crashed_run]
-
-        result = select_updated_runs(all_runs, sample_run_states)
-        # Only running_run should be selected (running state), not crashed_run
-        assert len(result) == 1
-        assert running_run in result
-        assert crashed_run not in result
-
-    def test_excludes_finished_runs(self, sample_run_states):
-        # Create mock run that's already finished
-        finished_run = Mock(id="finished_run")
-        all_runs = [finished_run]
-
-        result = select_updated_runs(all_runs, sample_run_states)
-        assert result == []
-
-    def test_mixed_run_states(self, sample_run_states):
-        # Mix of new, finished, and running runs
-        new_run = Mock(id="brand_new")
-        finished_run = Mock(id="finished_run")
-        running_run = Mock(id="running_run")
-        all_runs = [new_run, finished_run, running_run]
-
-        result = select_updated_runs(all_runs, sample_run_states)
-
-        # Should include new and running, exclude finished
-        assert len(result) == 2
-        assert new_run in result
-        assert running_run in result
-        assert finished_run not in result
-
-    def test_empty_inputs(self):
-        result = select_updated_runs([], {})
-        assert result == []
+    def test_does_not_modify_original_dataframe(self):
+        df = pd.DataFrame({"col": [MAX_INT + 1]})
+        original_dtype = df["col"].dtype
+        safe_convert_for_parquet(df)
+        assert df["col"].dtype == original_dtype

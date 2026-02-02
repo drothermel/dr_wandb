@@ -10,20 +10,16 @@ class TestHistoryEntryRecordFromWandbHistory:
         run_id = "test_run_123"
         record = HistoryEntryRecord.from_wandb_history(mock_wandb_history_entry, run_id)
 
-        # Test metadata fields
         assert record.run_id == run_id
         assert record.step == 100
-        # Test timestamp is a datetime but don't check exact time due to timezone conversion
         assert isinstance(record.timestamp, datetime)
         assert record.timestamp.year == 2024
         assert record.timestamp.month == 1
         assert record.timestamp.day == 15
         assert record.runtime == 1800
 
-        # Test wandb metadata
         assert record.wandb_metadata == {"core_version": "0.16.0"}
 
-        # Test metrics (non-underscore fields)
         expected_metrics = {
             "loss": 0.45,
             "accuracy": 0.87,
@@ -32,7 +28,6 @@ class TestHistoryEntryRecordFromWandbHistory:
         assert record.metrics == expected_metrics
 
     def test_handles_missing_optional_fields(self):
-        # History entry with missing optional fields
         minimal_entry = {
             "loss": 0.5,
             "accuracy": 0.8,
@@ -62,7 +57,6 @@ class TestHistoryEntryRecordFromWandbHistory:
 
         record = HistoryEntryRecord.from_wandb_history(entry, "test_run")
 
-        # Metrics should only contain non-underscore fields
         expected_metrics = {
             "loss": 0.3,
             "accuracy": 0.9,
@@ -70,71 +64,47 @@ class TestHistoryEntryRecordFromWandbHistory:
         }
         assert record.metrics == expected_metrics
 
-    def test_standard_fields_excludes_json_columns(self):
-        fields = HistoryEntryRecord.standard_fields()
 
-        # Should include basic fields
-        assert "id" in fields
-        assert "run_id" in fields
-        assert "step" in fields
-        assert "timestamp" in fields
-        assert "runtime" in fields
-
-        # Should exclude JSON fields
-        assert "wandb_metadata" not in fields
-        assert "metrics" not in fields
-
-
-class TestHistoryEntryRecordToDict:
-    def test_to_dict_without_metadata(self, mock_wandb_history_entry):
+class TestHistoryEntryRecordModelDump:
+    def test_model_dump_includes_all_fields(self, mock_wandb_history_entry):
         record = HistoryEntryRecord.from_wandb_history(
             mock_wandb_history_entry, "test_run"
         )
-        result = record.to_dict(include_metadata=False)
+        result = record.model_dump()
 
-        # Should include standard fields
-        assert "run_id" in result
-        assert "step" in result
-        assert "timestamp" in result
-        assert "runtime" in result
-
-        # Should include metrics
-        assert "loss" in result
-        assert "accuracy" in result
-        assert "learning_rate" in result
-        assert result["loss"] == 0.45
-
-        # Should not include metadata
-        assert "wandb_metadata" not in result
-
-    def test_to_dict_with_metadata(self, mock_wandb_history_entry):
-        record = HistoryEntryRecord.from_wandb_history(
-            mock_wandb_history_entry, "test_run"
-        )
-        result = record.to_dict(include_metadata=True)
-
-        # Should include standard fields
-        assert "run_id" in result
-        assert "step" in result
-
-        # Should include metrics
-        assert "loss" in result
-        assert "accuracy" in result
-
-        # Should include metadata
-        assert "wandb_metadata" in result
+        assert result["run_id"] == "test_run"
+        assert result["step"] == 100
+        assert isinstance(result["timestamp"], datetime)
+        assert result["runtime"] == 1800
         assert result["wandb_metadata"] == {"core_version": "0.16.0"}
+        assert result["metrics"] == {
+            "loss": 0.45,
+            "accuracy": 0.87,
+            "learning_rate": 0.001,
+        }
 
-    def test_to_dict_flattens_metrics_into_top_level(self, mock_wandb_history_entry):
+    def test_model_dump_json_serializable(self, mock_wandb_history_entry):
         record = HistoryEntryRecord.from_wandb_history(
             mock_wandb_history_entry, "test_run"
         )
-        result = record.to_dict()
+        json_str = record.model_dump_json()
 
-        # Metrics should be flattened into top level, not nested
-        assert result["loss"] == 0.45
-        assert result["accuracy"] == 0.87
-        assert result["learning_rate"] == 0.001
+        assert "test_run" in json_str
+        assert "0.45" in json_str
+        assert "0.87" in json_str
 
-        # Should not have nested metrics dict
-        assert "metrics" not in result
+    def test_mutable_defaults_are_not_shared(self):
+        """Verify that Field(default_factory=dict) ensures each instance gets its own dict."""
+        # Create two records without explicitly providing wandb_metadata or metrics
+        record1 = HistoryEntryRecord(run_id="run1")
+        record2 = HistoryEntryRecord(run_id="run2")
+
+        # Modify one instance's dict
+        record1.wandb_metadata["key"] = "value1"
+        record1.metrics["metric"] = 1.0
+
+        # The other instance should not be affected
+        assert record2.wandb_metadata == {}
+        assert record2.metrics == {}
+        assert record1.wandb_metadata == {"key": "value1"}
+        assert record1.metrics == {"metric": 1.0}

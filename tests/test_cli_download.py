@@ -1,97 +1,174 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
-import click
+import pandas as pd
+import pytest
 
-from dr_wandb.cli.download import resolve_config
+from dr_wandb.cli.download import ProjDownloadConfig, download_project
 
 
-class TestResolveConfig:
-    def test_uses_provided_values_over_defaults(self):
-        # Override all settings
-        cfg = resolve_config(
-            entity="custom_entity",
-            project="custom_project",
-            db_url="postgresql://custom_db",
-            output_dir="/custom/path",
+class TestProjDownloadConfigFilenames:
+    def test_runs_filename_pickle_format(self):
+        cfg = ProjDownloadConfig(
+            entity="my-team",
+            project="my-project",
+            output_format="pkl",
         )
+        assert cfg.runs_output_filename == "my-team_my-project_runs.pkl"
 
-        assert cfg.entity == "custom_entity"
-        assert cfg.project == "custom_project"
-        assert cfg.database_url == "postgresql://custom_db"
-        assert cfg.output_dir == Path("/custom/path")
-
-    def test_falls_back_to_config_defaults(self, monkeypatch):
-        # Mock environment variables for defaults
-        monkeypatch.setenv("DR_WANDB_ENTITY", "env_entity")
-        monkeypatch.setenv("DR_WANDB_PROJECT", "env_project")
-
-        cfg = resolve_config(entity=None, project=None, db_url=None, output_dir=None)
-
-        assert cfg.entity == "env_entity"
-        assert cfg.project == "env_project"
-        # Should use default database_url and output_dir from ProjDownloadSettings
-
-    def test_partial_override_with_defaults(self, monkeypatch):
-        # Set some env vars, override others
-        monkeypatch.setenv("DR_WANDB_ENTITY", "env_entity")
-
-        cfg = resolve_config(
-            entity=None,  # Will use env
-            project="override_project",  # Will override
-            db_url=None,
-            output_dir=None,
+    def test_runs_filename_parquet_format(self):
+        cfg = ProjDownloadConfig(
+            entity="my-team",
+            project="my-project",
+            output_format="parquet",
         )
+        assert cfg.runs_output_filename == "my-team_my-project_runs.parquet"
 
-        assert cfg.entity == "env_entity"
-        assert cfg.project == "override_project"
+    def test_histories_filename_pickle_format(self):
+        cfg = ProjDownloadConfig(
+            entity="my-team",
+            project="my-project",
+            output_format="pkl",
+        )
+        assert cfg.histories_output_filename == "my-team_my-project_histories.pkl"
 
-    def test_validation_raises_for_missing_entity(self, monkeypatch):
-        # Clear any environment variables that might provide defaults
-        # Note: This test may pass/fail depending on local environment
-        monkeypatch.delenv("DR_WANDB_ENTITY", raising=False)
-        monkeypatch.delenv("DR_WANDB_PROJECT", raising=False)
-        monkeypatch.delenv("DR_WANDB_DATABASE_URL", raising=False)
-        monkeypatch.delenv("DR_WANDB_OUTPUT_DIR", raising=False)
+    def test_histories_filename_parquet_format(self):
+        cfg = ProjDownloadConfig(
+            entity="my-team",
+            project="my-project",
+            output_format="parquet",
+        )
+        assert cfg.histories_output_filename == "my-team_my-project_histories.parquet"
 
-        # Test that validation either raises exception OR uses defaults if env vars exist
-        try:
-            result = resolve_config(
-                entity=None, project="valid_project", db_url=None, output_dir=None
-            )
-            # If no exception, check that we got some entity (possibly from env)
-            assert result.entity is not None, "Should have entity from somewhere"
-        except click.ClickException:
-            # This is also acceptable - validation worked as expected
-            pass
+    def test_filenames_with_special_characters_in_names(self):
+        cfg = ProjDownloadConfig(
+            entity="team-name",
+            project="project_v2",
+            output_format="pkl",
+        )
+        assert cfg.runs_output_filename == "team-name_project_v2_runs.pkl"
+        assert cfg.histories_output_filename == "team-name_project_v2_histories.pkl"
 
-    def test_validation_raises_for_missing_project(self, monkeypatch):
-        # Clear all env vars except entity
-        monkeypatch.delenv("DR_WANDB_ENTITY", raising=False)
-        monkeypatch.delenv("DR_WANDB_PROJECT", raising=False)
-        monkeypatch.delenv("DR_WANDB_DATABASE_URL", raising=False)
-        monkeypatch.delenv("DR_WANDB_OUTPUT_DIR", raising=False)
 
-        # Set only entity
-        monkeypatch.setenv("DR_WANDB_ENTITY", "valid_entity")
+class TestProjDownloadConfigFetchRunsCfg:
+    def test_fetch_runs_cfg_includes_history_by_default(self):
+        cfg = ProjDownloadConfig(
+            entity="my-team",
+            project="my-project",
+        )
+        assert cfg.fetch_runs_cfg["include_history"] is True
 
-        # Test that validation either raises exception OR uses defaults if env vars exist
-        try:
-            result = resolve_config(
-                entity=None, project=None, db_url=None, output_dir=None
-            )
-            # If no exception, check that we got some project (possibly from env)
-            assert result.project is not None, "Should have project from somewhere"
-        except click.ClickException:
-            # This is also acceptable - validation worked as expected
-            pass
+    def test_fetch_runs_cfg_excludes_history_when_runs_only(self):
+        cfg = ProjDownloadConfig(
+            entity="my-team",
+            project="my-project",
+            runs_only=True,
+        )
+        assert cfg.fetch_runs_cfg["include_history"] is False
 
-    def test_preserves_runs_per_page_from_original_config(self, monkeypatch):
-        monkeypatch.setenv("DR_WANDB_ENTITY", "test_entity")
-        monkeypatch.setenv("DR_WANDB_PROJECT", "test_project")
+    def test_fetch_runs_cfg_contains_entity_and_project(self):
+        cfg = ProjDownloadConfig(
+            entity="my-team",
+            project="my-project",
+        )
+        assert cfg.fetch_runs_cfg["entity"] == "my-team"
+        assert cfg.fetch_runs_cfg["project"] == "my-project"
 
-        cfg = resolve_config(entity=None, project=None, db_url=None, output_dir=None)
+    def test_fetch_runs_cfg_contains_runs_per_page(self):
+        cfg = ProjDownloadConfig(
+            entity="my-team",
+            project="my-project",
+            runs_per_page=100,
+        )
+        assert cfg.fetch_runs_cfg["runs_per_page"] == 100
 
-        # Should preserve the default runs_per_page
-        assert cfg.runs_per_page == 500
+
+class TestDownloadProjectParquetHistories:
+    """Test the incremental parquet saving logic for histories."""
+
+    def test_parquet_saves_histories_incrementally(self):
+        """Test that histories from multiple runs are combined correctly."""
+        runs = [
+            {"run_id": "run_1", "name": "run1"},
+            {"run_id": "run_2", "name": "run2"},
+        ]
+        histories = [
+            [{"run_id": "run_1", "step": i, "loss": 0.5 - i * 0.1} for i in range(3)],
+            [{"run_id": "run_2", "step": i, "loss": 0.4 - i * 0.1} for i in range(2)],
+        ]
+
+        with TemporaryDirectory() as tmpdir:
+            with patch("dr_wandb.cli.download.fetch_project_runs") as mock_fetch:
+                mock_fetch.return_value = (runs, histories)
+                download_project(
+                    entity="test_entity",
+                    project="test_project",
+                    output_dir=tmpdir,
+                    output_format="parquet",
+                    runs_only=False,
+                )
+
+            # Verify histories file was created and contains all entries
+            histories_file = Path(tmpdir) / "test_entity_test_project_histories.parquet"
+            assert histories_file.exists()
+
+            df = pd.read_parquet(histories_file)
+            assert len(df) == 5  # 3 + 2 entries
+            assert set(df["run_id"].unique()) == {"run_1", "run_2"}
+
+    def test_parquet_skips_empty_histories(self):
+        """Test that empty histories are not saved."""
+        runs = [
+            {"run_id": "run_1", "name": "run1"},
+            {"run_id": "run_2", "name": "run2"},
+        ]
+        histories = [
+            [],  # Empty history
+            [{"run_id": "run_2", "step": 0, "loss": 0.5}],
+        ]
+
+        with TemporaryDirectory() as tmpdir:
+            with patch("dr_wandb.cli.download.fetch_project_runs") as mock_fetch:
+                mock_fetch.return_value = (runs, histories)
+                download_project(
+                    entity="test_entity",
+                    project="test_project",
+                    output_dir=tmpdir,
+                    output_format="parquet",
+                    runs_only=False,
+                )
+
+            # Verify histories file was created with only non-empty entries
+            histories_file = Path(tmpdir) / "test_entity_test_project_histories.parquet"
+            assert histories_file.exists()
+
+            df = pd.read_parquet(histories_file)
+            assert len(df) == 1
+            assert df["run_id"].iloc[0] == "run_2"
+
+    def test_parquet_creates_empty_histories_file_when_all_empty(self):
+        """Test that an empty histories file is created when all histories are empty for consistency with pickle format."""
+        runs = [{"run_id": "run_1", "name": "run1"}]
+        histories = [[]]  # All empty
+
+        with TemporaryDirectory() as tmpdir:
+            with patch("dr_wandb.cli.download.fetch_project_runs") as mock_fetch:
+                mock_fetch.return_value = (runs, histories)
+                download_project(
+                    entity="test_entity",
+                    project="test_project",
+                    output_dir=tmpdir,
+                    output_format="parquet",
+                    runs_only=False,
+                )
+
+            # Verify empty histories file was created for consistency with pickle format
+            histories_file = Path(tmpdir) / "test_entity_test_project_histories.parquet"
+            assert histories_file.exists()
+            
+            # Verify the file contains an empty DataFrame
+            df = pd.read_parquet(histories_file)
+            assert len(df) == 0

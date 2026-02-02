@@ -1,18 +1,16 @@
-"""Lightweight WandB fetch utilities that avoid database storage."""
-
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterator
 from typing import Any
 
 import wandb
-import logging
 
 from dr_wandb.history_entry_record import HistoryEntryRecord
 from dr_wandb.run_record import RunRecord
 from dr_wandb.utils import default_progress_callback
 
-ProgressFn = Callable[[int, int, str], None]
+ProgressFn = Callable[[int, int | None, str], None]
 
 
 def _iterate_runs(
@@ -26,26 +24,15 @@ def _iterate_runs(
 
 
 def serialize_run(run: wandb.apis.public.Run) -> dict[str, Any]:
-    """Convert a WandB run into a JSON-friendly dict."""
-
     record = RunRecord.from_wandb_run(run)
-    return record.to_dict(include="all")
+    return record.model_dump()
 
 
 def serialize_history_entry(
     run: wandb.apis.public.Run, history_entry: dict[str, Any]
 ) -> dict[str, Any]:
-    """Convert a raw history payload into a structured dict."""
-
     record = HistoryEntryRecord.from_wandb_history(history_entry, run.id)
-    return {
-        "run_id": record.run_id,
-        "step": record.step,
-        "timestamp": record.timestamp,
-        "runtime": record.runtime,
-        "wandb_metadata": record.wandb_metadata,
-        "metrics": record.metrics,
-    }
+    return record.model_dump()
 
 
 def fetch_project_runs(
@@ -56,27 +43,46 @@ def fetch_project_runs(
     include_history: bool = True,
     progress_callback: ProgressFn | None = None,
 ) -> tuple[list[dict[str, Any]], list[list[dict[str, Any]]]]:
-    """Download runs (and optional history) without requiring Postgres."""
-
     progress = progress_callback or default_progress_callback
 
     runs: list[dict[str, Any]] = []
     histories: list[list[dict[str, Any]]] = []
 
-    logging.info(">> Downloading runs, this will take a while (minutes)")
-    run_iter = list(_iterate_runs(entity, project, runs_per_page=runs_per_page))
-    total = len(run_iter)
-    logging.info(f"  - total runs found: {total}")
+    logging.info(">> Downloading and processing runs, this will take a while (minutes)")
+
+    # Get Runs object to check for total count without materializing all runs
+    api = wandb.Api()
+    runs_obj = api.runs(f"{entity}/{project}", per_page=runs_per_page)
+    total: int | None = None
+
+    # Check if the Runs object has a total attribute (some API versions provide this)
+    if hasattr(runs_obj, "total") and runs_obj.total is not None:
+        total = runs_obj.total
+        logging.info(f"  - total runs found: {total}")
+    else:
+        # If total is not available, we'll count as we go
+        logging.info("  - streaming runs (total count not available upfront)")
 
     logging.info(f">> Serializing runs and maybe getting histories: {include_history}")
-    for index, run in enumerate(run_iter, start=1):
+
+    # Stream runs directly from the Runs object without materializing
+    run_count = 0
+    for run in runs_obj:
+        run_count += 1
         runs.append(serialize_run(run))
         if include_history:
             history_payloads = [
                 serialize_history_entry(run, entry) for entry in run.scan_history()
             ]
             histories.append(history_payloads)
-        progress(index, total, run.name)
+
+        # Use None to indicate unknown total when total is not available
+        progress(run_count, total, run.name)
+
+    # Update total if we didn't have it initially
+    if total is None:
+        total = run_count
+        logging.info(f"  - total runs processed: {total}")
 
     if not include_history:
         histories = []
