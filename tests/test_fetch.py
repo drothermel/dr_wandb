@@ -1,14 +1,32 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from dr_wandb.fetch import fetch_project_runs
+
+
+class MockRuns:
+    """Mock Runs object that is iterable and has a total attribute."""
+
+    def __init__(self, runs: list, total: int | None = None):
+        self._runs = runs
+        self.total = total if total is not None else len(runs)
+
+    def __iter__(self):
+        return iter(self._runs)
 
 
 def test_fetch_project_runs_with_history(mock_wandb_run, sample_history_entries):
     mock_wandb_run.scan_history.return_value = sample_history_entries
 
-    with patch("dr_wandb.fetch._iterate_runs", return_value=iter([mock_wandb_run])):
+    # Create a mock Runs object that is iterable
+    mock_runs_obj = MockRuns([mock_wandb_run], total=1)
+
+    with patch("dr_wandb.fetch.wandb.Api") as mock_api:
+        mock_api_instance = Mock()
+        mock_api_instance.runs.return_value = mock_runs_obj
+        mock_api.return_value = mock_api_instance
+
         runs, histories = fetch_project_runs(
             "test_entity",
             "test_project",
@@ -35,7 +53,14 @@ def test_fetch_project_runs_without_history(mock_wandb_run):
     def progress(idx: int, total: int, name: str) -> None:
         progress_calls.append((idx, total, name))
 
-    with patch("dr_wandb.fetch._iterate_runs", return_value=iter([mock_wandb_run])):
+    # Create a mock Runs object that is iterable
+    mock_runs_obj = MockRuns([mock_wandb_run], total=1)
+
+    with patch("dr_wandb.fetch.wandb.Api") as mock_api:
+        mock_api_instance = Mock()
+        mock_api_instance.runs.return_value = mock_runs_obj
+        mock_api.return_value = mock_api_instance
+
         runs, histories = fetch_project_runs(
             "test_entity",
             "test_project",

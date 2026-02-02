@@ -20,7 +20,12 @@ class TestRunRecordFromWandbRun:
         assert record.summary == {"final_loss": 0.25, "accuracy": 0.95, "val_loss": 0.3}
         assert record.wandb_metadata == {"notes": "test run", "tags": ["experiment"]}
         assert record.system_metrics == {"gpu_memory": 8192, "cpu_count": 4}
-        assert record.system_attrs == {"framework": "pytorch", "version": "2.0"}
+        assert record.system_attrs == {
+            "config": {"learning_rate": 0.001, "batch_size": 32, "epochs": 10},
+            "summary_metrics": {"final_loss": 0.25, "accuracy": 0.95, "val_loss": 0.3},
+            "metadata": {"notes": "test run", "tags": ["experiment"]},
+            "system_metrics": {"gpu_memory": 8192, "cpu_count": 4},
+        }
 
         assert record.sweep_info == {
             "sweep_id": "sweep_456",
@@ -45,7 +50,7 @@ class TestRunRecordFromWandbRun:
         assert record.sweep_info == {"sweep_id": None, "sweep_url": None}
 
     def test_handles_none_summary_gracefully(self, mock_wandb_run):
-        mock_wandb_run.summary = None
+        mock_wandb_run.summary_metrics = None
         record = RunRecord.from_wandb_run(mock_wandb_run)
 
         assert record.summary == {}
@@ -75,7 +80,12 @@ class TestRunRecordModelDump:
         }
         assert result["wandb_metadata"] == {"notes": "test run", "tags": ["experiment"]}
         assert result["system_metrics"] == {"gpu_memory": 8192, "cpu_count": 4}
-        assert result["system_attrs"] == {"framework": "pytorch", "version": "2.0"}
+        assert result["system_attrs"] == {
+            "config": {"learning_rate": 0.001, "batch_size": 32, "epochs": 10},
+            "summary_metrics": {"final_loss": 0.25, "accuracy": 0.95, "val_loss": 0.3},
+            "metadata": {"notes": "test run", "tags": ["experiment"]},
+            "system_metrics": {"gpu_memory": 8192, "cpu_count": 4},
+        }
         assert result["sweep_info"] == {
             "sweep_id": "sweep_456",
             "sweep_url": "https://wandb.ai/test_entity/test_project/sweeps/sweep_456",

@@ -10,18 +10,25 @@ import typer
 from pydantic import BaseModel, Field, computed_field
 
 from dr_wandb.fetch import fetch_project_runs
-from dr_wandb.utils import safe_convert_for_parquet
+from dr_wandb.utils import find_project_root, safe_convert_for_parquet
 
 app = typer.Typer()
 
 type OutputFormat = Literal["pkl", "parquet"]
+
+OUTPUT_FORMAT_EXTENSION: dict[OutputFormat, str] = {
+    "pkl": "pkl",
+    "parquet": "parquet",
+}
 
 
 class ProjDownloadConfig(BaseModel):
     entity: str
     project: str
     output_dir: Path = Field(
-        default_factory=lambda: (Path(__file__).parent.parent.parent.parent / "data")
+        default_factory=lambda: (
+            find_project_root(start_path=Path(__file__).parent) / "data"
+        )
     )
     output_format: OutputFormat = "pkl"
     runs_only: bool = False
@@ -30,15 +37,18 @@ class ProjDownloadConfig(BaseModel):
 
     @computed_field
     @property
+    def output_extension(self) -> str:
+        return OUTPUT_FORMAT_EXTENSION[self.output_format]
+
+    @computed_field
+    @property
     def runs_output_filename(self) -> str:
-        ext = "parquet" if self.output_format == "parquet" else "pkl"
-        return f"{self.entity}_{self.project}_runs.{ext}"
+        return f"{self.entity}_{self.project}_runs.{self.output_extension}"
 
     @computed_field
     @property
     def histories_output_filename(self) -> str:
-        ext = "parquet" if self.output_format == "parquet" else "pkl"
-        return f"{self.entity}_{self.project}_histories.{ext}"
+        return f"{self.entity}_{self.project}_histories.{self.output_extension}"
 
     def progress_callback(self, run_index: int, total_runs: int, message: str) -> None:
         if run_index % self.log_every == 0:

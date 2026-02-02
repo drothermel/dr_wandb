@@ -18,13 +18,9 @@ def mock_wandb_run():
     run.config = {"learning_rate": 0.001, "batch_size": 32, "epochs": 10}
     run.metadata = {"notes": "test run", "tags": ["experiment"]}
     run.system_metrics = {"gpu_memory": 8192, "cpu_count": 4}
-    run._attrs = {"framework": "pytorch", "version": "2.0"}
+    run.summary_metrics = {"final_loss": 0.25, "accuracy": 0.95, "val_loss": 0.3}
     run.sweep_id = "sweep_456"
     run.sweep_url = "https://wandb.ai/test_entity/test_project/sweeps/sweep_456"
-
-    summary_mock = Mock()
-    summary_mock._json_dict = {"final_loss": 0.25, "accuracy": 0.95, "val_loss": 0.3}
-    run.summary = summary_mock
 
     return run
 
@@ -41,13 +37,9 @@ def mock_wandb_run_minimal():
     run.config = {}
     run.metadata = None
     run.system_metrics = None
-    run._attrs = {}
+    run.summary_metrics = None
     run.sweep_id = None
     run.sweep_url = None
-
-    summary_mock = Mock()
-    summary_mock._json_dict = {}
-    run.summary = summary_mock
 
     return run
 

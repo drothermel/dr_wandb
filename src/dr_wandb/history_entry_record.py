@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 def _extract_timestamp(raw: float | None) -> datetime | None:
@@ -15,8 +15,8 @@ class HistoryEntryRecord(BaseModel):
     step: int | None = None
     timestamp: datetime | None = None
     runtime: int | None = None
-    wandb_metadata: dict[str, Any] = {}
-    metrics: dict[str, Any] = {}
+    wandb_metadata: dict[str, Any] = Field(default_factory=dict)
+    metrics: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
     def from_wandb_history(

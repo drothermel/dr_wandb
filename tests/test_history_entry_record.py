@@ -92,3 +92,19 @@ class TestHistoryEntryRecordModelDump:
         assert "test_run" in json_str
         assert "0.45" in json_str
         assert "0.87" in json_str
+
+    def test_mutable_defaults_are_not_shared(self):
+        """Verify that Field(default_factory=dict) ensures each instance gets its own dict."""
+        # Create two records without explicitly providing wandb_metadata or metrics
+        record1 = HistoryEntryRecord(run_id="run1")
+        record2 = HistoryEntryRecord(run_id="run2")
+
+        # Modify one instance's dict
+        record1.wandb_metadata["key"] = "value1"
+        record1.metrics["metric"] = 1.0
+
+        # The other instance should not be affected
+        assert record2.wandb_metadata == {}
+        assert record2.metrics == {}
+        assert record1.wandb_metadata == {"key": "value1"}
+        assert record1.metrics == {"metric": 1.0}
