@@ -16,6 +16,7 @@ RUN_DATA_COMPONENTS = [
     "system_attrs",
     "sweep_info",
 ]
+SWEEP_INFO_KEYS = ["sweep_id", "sweep_url"]
 
 
 class RunRecord(BaseModel):
@@ -46,8 +47,7 @@ class RunRecord(BaseModel):
             wandb_metadata=wandb_run.metadata or {},
             system_metrics=wandb_run.system_metrics or {},
             system_attrs=dict(wandb_run._attrs),
-            sweep_info={
-                "sweep_id": getattr(wandb_run, "sweep_id", None),
-                "sweep_url": getattr(wandb_run, "sweep_url", None),
-            },
+            sweep_info=dict(
+                (key, getattr(wandb_run, key, None)) for key in SWEEP_INFO_KEYS
+            ),
         )

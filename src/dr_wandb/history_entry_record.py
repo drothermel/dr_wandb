@@ -5,9 +5,14 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from dr_wandb.utils import extract_as_datetime
-
 type HistoryEntry = dict[str, Any]
+
+SPECIAL_KEY_MAP = {
+    "step": "_step",
+    "timestamp": "_timestamp",
+    "runtime": "_runtime",
+    "wandb_metadata": "_wandb",
+}
 
 
 class HistoryEntryRecord(BaseModel):
@@ -24,9 +29,6 @@ class HistoryEntryRecord(BaseModel):
     ) -> HistoryEntryRecord:
         return cls(
             run_id=run_id,
-            step=history_entry.get("_step"),
-            timestamp=extract_as_datetime(history_entry, "_timestamp"),
-            runtime=history_entry.get("_runtime"),
-            wandb_metadata=history_entry.get("_wandb", {}),
             metrics={k: v for k, v in history_entry.items() if not k.startswith("_")},
+            **{k: v for k, v in history_entry.items() if k in SPECIAL_KEY_MAP},
         )
