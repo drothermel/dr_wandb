@@ -1,12 +1,10 @@
-"""Lightweight WandB fetch utilities that avoid database storage."""
-
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterator
 from typing import Any
 
 import wandb
-import logging
 
 from dr_wandb.history_entry_record import HistoryEntryRecord
 from dr_wandb.run_record import RunRecord
@@ -26,26 +24,15 @@ def _iterate_runs(
 
 
 def serialize_run(run: wandb.apis.public.Run) -> dict[str, Any]:
-    """Convert a WandB run into a JSON-friendly dict."""
-
     record = RunRecord.from_wandb_run(run)
-    return record.to_dict(include="all")
+    return record.model_dump()
 
 
 def serialize_history_entry(
     run: wandb.apis.public.Run, history_entry: dict[str, Any]
 ) -> dict[str, Any]:
-    """Convert a raw history payload into a structured dict."""
-
     record = HistoryEntryRecord.from_wandb_history(history_entry, run.id)
-    return {
-        "run_id": record.run_id,
-        "step": record.step,
-        "timestamp": record.timestamp,
-        "runtime": record.runtime,
-        "wandb_metadata": record.wandb_metadata,
-        "metrics": record.metrics,
-    }
+    return record.model_dump()
 
 
 def fetch_project_runs(
@@ -56,8 +43,6 @@ def fetch_project_runs(
     include_history: bool = True,
     progress_callback: ProgressFn | None = None,
 ) -> tuple[list[dict[str, Any]], list[list[dict[str, Any]]]]:
-    """Download runs (and optional history) without requiring Postgres."""
-
     progress = progress_callback or default_progress_callback
 
     runs: list[dict[str, Any]] = []

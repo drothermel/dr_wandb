@@ -4,14 +4,10 @@ from datetime import datetime
 from unittest.mock import Mock
 
 import pytest
-from sqlalchemy import create_engine
-
-from dr_wandb.constants import Base
 
 
 @pytest.fixture
 def mock_wandb_run():
-    """Realistic mock WandB run object for testing data transformations."""
     run = Mock()
     run.id = "test_run_123"
     run.name = "test_experiment"
@@ -26,7 +22,6 @@ def mock_wandb_run():
     run.sweep_id = "sweep_456"
     run.sweep_url = "https://wandb.ai/test_entity/test_project/sweeps/sweep_456"
 
-    # Mock summary with _json_dict
     summary_mock = Mock()
     summary_mock._json_dict = {"final_loss": 0.25, "accuracy": 0.95, "val_loss": 0.3}
     run.summary = summary_mock
@@ -36,7 +31,6 @@ def mock_wandb_run():
 
 @pytest.fixture
 def mock_wandb_run_minimal():
-    """Minimal mock WandB run for edge case testing."""
     run = Mock()
     run.id = "minimal_run"
     run.name = "minimal_test"
@@ -51,7 +45,6 @@ def mock_wandb_run_minimal():
     run.sweep_id = None
     run.sweep_url = None
 
-    # Mock empty summary
     summary_mock = Mock()
     summary_mock._json_dict = {}
     run.summary = summary_mock
@@ -61,11 +54,10 @@ def mock_wandb_run_minimal():
 
 @pytest.fixture
 def mock_wandb_history_entry():
-    """Sample WandB history entry for testing."""
     return {
         "_step": 100,
-        "_timestamp": 1705312200.0,  # 2024-01-15 10:30:00 UTC
-        "_runtime": 1800,  # 30 minutes
+        "_timestamp": 1705312200.0,
+        "_runtime": 1800,
         "_wandb": {"core_version": "0.16.0"},
         "loss": 0.45,
         "accuracy": 0.87,
@@ -75,7 +67,6 @@ def mock_wandb_history_entry():
 
 @pytest.fixture
 def sample_history_entries():
-    """Multiple history entries for batch testing."""
     return [
         {
             "_step": i,
@@ -90,33 +81,10 @@ def sample_history_entries():
 
 
 @pytest.fixture
-def in_memory_db():
-    """SQLite in-memory database for testing."""
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    return engine
-
-
-# project_store_with_temp_dir fixture removed - requires PostgreSQL for JSONB support
-# Will be re-added in future when database integration tests are reimplemented
-
-
-@pytest.fixture
 def sample_run_states():
-    """Sample run states for testing filtering logic."""
     return {
         "finished_run": "finished",
         "running_run": "running",
         "crashed_run": "crashed",
         "failed_run": "failed",
-    }
-
-
-@pytest.fixture
-def sample_filter_kwargs():
-    """Sample filter kwargs for query testing."""
-    return {
-        "project": "test_project",
-        "entity": "test_entity",
-        "state": "finished",
     }

@@ -47,4 +47,3 @@ def test_fetch_project_runs_without_history(mock_wandb_run):
     assert runs[0]["run_id"] == mock_wandb_run.id
     assert histories == []
     assert progress_calls == [(1, 1, mock_wandb_run.name)]
-
