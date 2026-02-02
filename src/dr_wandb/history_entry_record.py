@@ -5,30 +5,28 @@ from typing import Any
 
 from pydantic import BaseModel
 
-type HistoryEntry = dict[str, Any]
 
-SPECIAL_KEY_MAP = {
-    "step": "_step",
-    "timestamp": "_timestamp",
-    "runtime": "_runtime",
-    "wandb_metadata": "_wandb",
-}
+def _extract_timestamp(raw: float | None) -> datetime | None:
+    return datetime.fromtimestamp(raw) if raw is not None else None
 
 
 class HistoryEntryRecord(BaseModel):
     run_id: str
-    step: int | None
-    timestamp: datetime | None
-    runtime: int | None
-    wandb_metadata: dict[str, Any]
-    metrics: dict[str, Any]
+    step: int | None = None
+    timestamp: datetime | None = None
+    runtime: int | None = None
+    wandb_metadata: dict[str, Any] = {}
+    metrics: dict[str, Any] = {}
 
     @classmethod
     def from_wandb_history(
-        cls, history_entry: HistoryEntry, run_id: str
+        cls, history_entry: dict[str, Any], run_id: str
     ) -> HistoryEntryRecord:
         return cls(
             run_id=run_id,
+            step=history_entry.get("_step"),
+            timestamp=_extract_timestamp(history_entry.get("_timestamp")),
+            runtime=history_entry.get("_runtime"),
+            wandb_metadata=history_entry.get("_wandb", {}),
             metrics={k: v for k, v in history_entry.items() if not k.startswith("_")},
-            **{k: v for k, v in history_entry.items() if k in SPECIAL_KEY_MAP},
         )

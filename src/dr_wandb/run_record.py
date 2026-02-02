@@ -1,21 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
-import wandb
 from pydantic import BaseModel
 
-from dr_wandb.constants import RunId, RunState
+if TYPE_CHECKING:
+    import wandb
 
-RUN_DATA_COMPONENTS = [
-    "config",
-    "summary",
-    "wandb_metadata",
-    "system_metrics",
-    "system_attrs",
-    "sweep_info",
-]
+type RunId = str
+type RunState = Literal["finished", "running", "crashed", "failed", "killed"]
+
 SWEEP_INFO_KEYS = ["sweep_id", "sweep_url"]
 
 

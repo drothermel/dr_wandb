@@ -1,12 +1,16 @@
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
-import wandb
 
-from dr_wandb.constants import MAX_INT, RunId, RunState
+if TYPE_CHECKING:
+    import wandb
+
+MAX_INT = 2**31 - 1
 
 
 def extract_as_datetime(data: dict[str, Any], key: str) -> datetime | None:
@@ -16,7 +20,7 @@ def extract_as_datetime(data: dict[str, Any], key: str) -> datetime | None:
 
 def select_updated_runs(
     all_runs: list[wandb.apis.public.Run],
-    existing_run_states: dict[RunId, RunState],
+    existing_run_states: dict[str, str],
 ) -> list[wandb.apis.public.Run]:
     return [
         run
