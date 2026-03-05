@@ -65,9 +65,10 @@ class FakeRun:
 
 
 class FakeApi:
-    def __init__(self, runs: list[FakeRun]) -> None:
+    def __init__(self, runs: list[FakeRun], project_names: list[str] | None = None) -> None:
         self._runs = runs
         self._run_lookup = {run.id: run for run in runs}
+        self._project_names = project_names if project_names is not None else ["project"]
 
     def runs(self, path: str, per_page: int = 500):
         _ = path
@@ -77,6 +78,18 @@ class FakeApi:
     def run(self, path: str):
         run_id = path.rsplit("/", 1)[-1]
         return self._run_lookup[run_id]
+
+    def project(self, name: str, entity: str):
+        _ = entity
+        for project_name in self._project_names:
+            if project_name == name:
+                return type("Project", (), {"name": project_name})
+        raise ValueError(f"Could not find project {name}")
+
+    def projects(self, entity: str):
+        _ = entity
+        names = self._project_names
+        return [type("Project", (), {"name": name}) for name in names]
 
 
 class RecordingPolicy(NoopPolicy):
@@ -158,6 +171,35 @@ def _engine_with(
     return SyncEngine(
         policy=policy,
         api_factory=lambda: FakeApi(runs),
+        sleep_fn=lambda _: None,
+        max_retries=2,
+        retry_backoff_seconds=0.0,
+    ), state_path
+
+
+def _engine_with_projects(
+    runs: list[FakeRun],
+    policy: SyncPolicy | NoopPolicy,
+    state_path: Path,
+    project_names: list[str],
+) -> tuple[SyncEngine, Path]:
+    return SyncEngine(
+        policy=policy,
+        api_factory=lambda: FakeApi(runs, project_names=project_names),
+        sleep_fn=lambda _: None,
+        max_retries=2,
+        retry_backoff_seconds=0.0,
+    ), state_path
+
+
+def _engine_with_api(
+    policy: SyncPolicy | NoopPolicy,
+    state_path: Path,
+    api_factory: Any,
+) -> tuple[SyncEngine, Path]:
+    return SyncEngine(
+        policy=policy,
+        api_factory=api_factory,
         sleep_fn=lambda _: None,
         max_retries=2,
         retry_backoff_seconds=0.0,
@@ -329,3 +371,55 @@ def test_export_project_respects_policy_keys_window_and_decision(tmp_path: Path)
     assert run_row["decision_metadata"]["rows"] == 1
     assert history_row["_step"] == 1
     assert "lr" in history_row["metrics"]
+
+
+def test_sync_project_resolves_project_case_and_punctuation(tmp_path: Path):
+    runs = [FakeRun("r1", "run-1")]
+    engine, state_path = _engine_with_projects(
+        runs,
+        NoopPolicy(),
+        tmp_path / "state.json",
+        project_names=["MoE"],
+    )
+
+    summary = engine.sync_project("ml-moe", "moe", state_path=state_path)
+
+    assert summary.entity == "ml-moe"
+    assert summary.project == "MoE"
+    assert summary.processed_runs == 1
+
+
+def test_sync_project_raises_clear_error_for_missing_project(tmp_path: Path):
+    runs = [FakeRun("r1", "run-1")]
+    engine, state_path = _engine_with_projects(
+        runs,
+        NoopPolicy(),
+        tmp_path / "state.json",
+        project_names=["alpha", "beta"],
+    )
+
+    with pytest.raises(ValueError, match="Could not find project"):
+        engine.sync_project("ml-moe", "moe", state_path=state_path)
+
+
+def test_sync_project_raises_resolver_error_when_lookup_and_listing_fail(tmp_path: Path):
+    runs = [FakeRun("r1", "run-1")]
+
+    class BrokenApi(FakeApi):
+        def project(self, name: str, entity: str):
+            _ = name
+            _ = entity
+            raise RuntimeError("lookup failed")
+
+        def projects(self, entity: str):
+            _ = entity
+            raise RuntimeError("listing failed")
+
+    engine, state_path = _engine_with_api(
+        NoopPolicy(),
+        tmp_path / "state.json",
+        api_factory=lambda: BrokenApi(runs),
+    )
+
+    with pytest.raises(ValueError, match="Direct lookup failed"):
+        engine.sync_project("ml-moe", "moe", state_path=state_path)

@@ -25,7 +25,7 @@ dependencies = [
     "pyarrow>=21.0.0",
     "pydantic>=2.0.0",
     "typer>=0.20.0",
-    "wandb>=0.21.4",
+    "wandb>=0.25.0",
 ]
 
 [project.urls]

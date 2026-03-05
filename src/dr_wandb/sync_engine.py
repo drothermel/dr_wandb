@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -170,6 +171,88 @@ class SyncEngine:
         self.max_retries = max_retries
         self.retry_backoff_seconds = retry_backoff_seconds
 
+    def _normalize_project_token(self, value: str) -> str:
+        return re.sub(r"[^A-Za-z0-9]+", "", value).lower()
+
+    def _resolve_project_ref(self, api: Any, entity: str, project: str) -> tuple[str, str]:
+        direct_lookup_error: Exception | None = None
+        if hasattr(api, "project"):
+            try:
+                project_obj = api.project(project, entity=entity)
+                resolved_name = getattr(project_obj, "name", None)
+                if resolved_name:
+                    return entity, str(resolved_name)
+                return entity, project
+            except Exception as exc:  # noqa: BLE001
+                direct_lookup_error = exc
+
+        if not hasattr(api, "projects"):
+            if direct_lookup_error is not None:
+                raise ValueError(
+                    f"Could not resolve project {project!r} in entity {entity!r}. "
+                    f"Direct lookup failed with {type(direct_lookup_error).__name__}: "
+                    f"{direct_lookup_error}"
+                ) from direct_lookup_error
+            return entity, project
+
+        try:
+            projects = list(api.projects(entity=entity))
+        except Exception as exc:  # noqa: BLE001
+            if direct_lookup_error is not None:
+                raise ValueError(
+                    f"Could not resolve project {project!r} in entity {entity!r}. "
+                    f"Direct lookup failed with {type(direct_lookup_error).__name__}: "
+                    f"{direct_lookup_error}; project listing failed with "
+                    f"{type(exc).__name__}: {exc}"
+                ) from direct_lookup_error
+            raise ValueError(
+                f"Could not resolve project {project!r} in entity {entity!r}. "
+                f"Project listing failed with {type(exc).__name__}: {exc}"
+            ) from exc
+
+        if not projects:
+            if direct_lookup_error is not None:
+                raise ValueError(
+                    f"Could not find project {project!r} in entity {entity!r}. "
+                    "Direct lookup failed and project listing returned no projects."
+                ) from direct_lookup_error
+            return entity, project
+
+        names: list[str] = []
+        for item in projects:
+            name = getattr(item, "name", None)
+            if name:
+                names.append(str(name))
+
+        if project in names:
+            return entity, project
+
+        requested_norm = self._normalize_project_token(project)
+        normalized_matches = [
+            name for name in names if self._normalize_project_token(name) == requested_norm
+        ]
+        if len(normalized_matches) == 1:
+            resolved = normalized_matches[0]
+            logging.info(
+                "Resolved project %r to %r in entity %r",
+                project,
+                resolved,
+                entity,
+            )
+            return entity, resolved
+
+        if normalized_matches:
+            raise ValueError(
+                "Ambiguous project name "
+                f"{project!r} for entity {entity!r}; matching projects: {sorted(normalized_matches)}"
+            )
+
+        preview = ", ".join(sorted(names)[:15])
+        raise ValueError(
+            f"Could not find project {project!r} in entity {entity!r}. "
+            f"Available projects include: [{preview}]"
+        )
+
     def _with_retry(self, ctx: SyncContext, fn: Callable[[], Any], fallback: Any) -> Any:
         attempts = 0
         while True:
@@ -328,11 +411,17 @@ class SyncEngine:
         runs_per_page: int = 500,
         save_every: int = 25,
     ) -> SyncSummary:
-        resolved_state_path = state_path or default_state_path(entity, project)
-        state = load_state(resolved_state_path, entity=entity, project=project)
-
         api = self._api_factory()
-        runs_obj = api.runs(f"{entity}/{project}", per_page=runs_per_page)
+        resolved_entity, resolved_project = self._resolve_project_ref(api, entity, project)
+        resolved_state_path = state_path or default_state_path(
+            resolved_entity, resolved_project
+        )
+        state = load_state(
+            resolved_state_path, entity=resolved_entity, project=resolved_project
+        )
+        runs_obj = api.runs(
+            f"{resolved_entity}/{resolved_project}", per_page=runs_per_page
+        )
 
         evaluations: list[RunEvaluation] = []
         processed_runs = 0
@@ -342,8 +431,8 @@ class SyncEngine:
             processed_runs += 1
             cursor = state.runs.get(run.id)
             ctx = SyncContext(
-                entity=entity,
-                project=project,
+                entity=resolved_entity,
+                project=resolved_project,
                 run_id=run.id,
                 run_name=run.name,
                 run_state=getattr(run, "state", None),
@@ -385,8 +474,8 @@ class SyncEngine:
         save_state(state, resolved_state_path)
 
         return SyncSummary(
-            entity=entity,
-            project=project,
+            entity=resolved_entity,
+            project=resolved_project,
             state_path=str(resolved_state_path),
             processed_runs=processed_runs,
             planned_patches=planned_patches,
@@ -402,11 +491,17 @@ class SyncEngine:
         runs_per_page: int = 500,
         save_every: int = 25,
     ) -> list[PlannedPatch]:
-        resolved_state_path = state_path or default_state_path(entity, project)
-        state = load_state(resolved_state_path, entity=entity, project=project)
-
         api = self._api_factory()
-        runs_obj = api.runs(f"{entity}/{project}", per_page=runs_per_page)
+        resolved_entity, resolved_project = self._resolve_project_ref(api, entity, project)
+        resolved_state_path = state_path or default_state_path(
+            resolved_entity, resolved_project
+        )
+        state = load_state(
+            resolved_state_path, entity=resolved_entity, project=resolved_project
+        )
+        runs_obj = api.runs(
+            f"{resolved_entity}/{resolved_project}", per_page=runs_per_page
+        )
 
         planned: list[PlannedPatch] = []
         processed_runs = 0
@@ -415,8 +510,8 @@ class SyncEngine:
             processed_runs += 1
             cursor = state.runs.get(run.id)
             ctx = SyncContext(
-                entity=entity,
-                project=project,
+                entity=resolved_entity,
+                project=resolved_project,
                 run_id=run.id,
                 run_name=run.name,
                 run_state=getattr(run, "state", None),
@@ -440,8 +535,8 @@ class SyncEngine:
                 if should_update:
                     planned.append(
                         PlannedPatch(
-                            entity=entity,
-                            project=project,
+                            entity=resolved_entity,
+                            project=resolved_project,
                             run_id=ctx.run_id,
                             run_name=ctx.run_name,
                             patch=patch,
@@ -529,11 +624,42 @@ class SyncEngine:
         return runs_path, history_path, manifest_path
 
     def export_project(self, config: ExportConfig) -> ExportSummary:
-        resolved_state_path = config.state_path or default_state_path(config.entity, config.project)
-        state = load_state(resolved_state_path, entity=config.entity, project=config.project)
-
+        started_at = time.monotonic()
+        logging.info(
+            "Resolving project reference for export: entity=%s project=%s",
+            config.entity,
+            config.project,
+        )
         api = self._api_factory()
-        runs_obj = api.runs(f"{config.entity}/{config.project}", per_page=config.runs_per_page)
+        resolved_entity, resolved_project = self._resolve_project_ref(
+            api, config.entity, config.project
+        )
+        logging.info(
+            "Export target resolved to %s/%s",
+            resolved_entity,
+            resolved_project,
+        )
+        resolved_state_path = config.state_path or default_state_path(
+            resolved_entity, resolved_project
+        )
+        state = load_state(
+            resolved_state_path, entity=resolved_entity, project=resolved_project
+        )
+        logging.info(
+            "Loaded sync state from %s (tracked_runs=%s)",
+            resolved_state_path,
+            len(state.runs),
+        )
+        logging.info(
+            "Building runs iterator for %s/%s (runs_per_page=%s)",
+            resolved_entity,
+            resolved_project,
+            config.runs_per_page,
+        )
+        runs_obj = api.runs(
+            f"{resolved_entity}/{resolved_project}", per_page=config.runs_per_page
+        )
+        logging.info("Starting run iteration")
 
         run_rows: list[dict[str, Any]] = []
         history_rows: list[dict[str, Any]] = []
@@ -543,8 +669,8 @@ class SyncEngine:
             processed_runs += 1
             cursor = state.runs.get(run.id)
             ctx = SyncContext(
-                entity=config.entity,
-                project=config.project,
+                entity=resolved_entity,
+                project=resolved_project,
                 run_id=run.id,
                 run_name=run.name,
                 run_state=getattr(run, "state", None),
@@ -562,8 +688,8 @@ class SyncEngine:
             run_rows.append(
                 _serialize_run_row(
                     run,
-                    entity=config.entity,
-                    project=config.project,
+                    entity=resolved_entity,
+                    project=resolved_project,
                     decision=decision,
                     cursor=updated_cursor,
                 )
@@ -575,21 +701,37 @@ class SyncEngine:
             if processed_runs % config.save_every == 0:
                 state.last_synced_at = datetime.now(timezone.utc).isoformat()
                 save_state(state, resolved_state_path)
+                logging.info(
+                    "Export progress: runs=%s history_rows=%s (state saved)",
+                    processed_runs,
+                    len(history_rows),
+                )
 
         exported_at = datetime.now(timezone.utc).isoformat()
         state.last_synced_at = exported_at
         save_state(state, resolved_state_path)
 
         runs_path, history_path, manifest_path = self._write_export_outputs(
-            config=config,
+            config=config.model_copy(
+                update={"entity": resolved_entity, "project": resolved_project}
+            ),
             run_rows=run_rows,
             history_rows=history_rows,
             exported_at=exported_at,
         )
+        elapsed_seconds = time.monotonic() - started_at
+        logging.info(
+            "Export complete: runs=%s history_rows=%s elapsed=%.2fs runs_file=%s history_file=%s",
+            len(run_rows),
+            len(history_rows),
+            elapsed_seconds,
+            runs_path,
+            history_path,
+        )
 
         return ExportSummary(
-            entity=config.entity,
-            project=config.project,
+            entity=resolved_entity,
+            project=resolved_project,
             state_path=str(resolved_state_path),
             output_format=config.output_format,
             runs_output_path=str(runs_path),

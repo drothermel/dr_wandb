@@ -47,6 +47,20 @@ def export_main(argv: list[str] | None = None) -> int:
         policy_module=args.policy_module,
         policy_class=args.policy_class,
     )
+    logging.info(
+        "Starting wandb export for %s/%s (format=%s, runs_per_page=%s, save_every=%s)",
+        cfg.entity,
+        cfg.project,
+        cfg.output_format,
+        cfg.runs_per_page,
+        cfg.save_every,
+    )
+    logging.info(
+        "Using policy %s.%s with state path %s",
+        cfg.policy_module,
+        cfg.policy_class,
+        cfg.state_path,
+    )
     summary = engine.export_project(cfg)
     payload = summary.model_dump(mode="python")
 
