@@ -34,6 +34,9 @@ Repository = "https://github.com/drothermel/dr_wandb"
 
 [project.scripts]
 wandb-download = "dr_wandb.cli.download:app"
+wandb-sync = "dr_wandb.cli.sync:sync_main"
+wandb-plan-patches = "dr_wandb.cli.sync:plan_patches_main"
+wandb-apply-patches = "dr_wandb.cli.sync:apply_patches_main"
 
 [build-system]
 requires = ["hatchling"]

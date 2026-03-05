@@ -99,6 +99,39 @@ data = record.model_dump()  # Get as dict
 json_str = record.model_dump_json()  # Get as JSON string
 ```
 
+## Policy-Driven Sync Engine
+
+`dr_wandb` includes a generic sync/update engine that is domain-agnostic.
+Consumers provide policy hooks for classification and patch inference.
+
+```python
+from dr_wandb.sync_engine import SyncEngine
+from dr_wandb.sync_policy import NoopPolicy
+
+engine = SyncEngine(policy=NoopPolicy())
+summary = engine.sync_project(entity="my-team", project="my-project")
+print(summary.processed_runs)
+```
+
+### CLI commands
+
+```bash
+wandb-sync ENTITY PROJECT --policy-module my_pkg.my_policy --policy-class MyPolicy
+wandb-plan-patches ENTITY PROJECT ./patches.jsonl --policy-module my_pkg.my_policy --policy-class MyPolicy
+wandb-apply-patches ./patches.jsonl            # dry-run
+wandb-apply-patches ./patches.jsonl --apply    # writes updates
+```
+
+### Custom policy shape
+
+Implement a policy class with hooks:
+- `select_history_keys(ctx)`
+- `select_history_window(ctx)`
+- `classify_run(ctx, history_tail)`
+- `infer_patch(ctx, history_tail)`
+- `should_update(ctx, patch)`
+- `on_error(ctx, exc)`
+
 ## Data Schema
 
 **RunRecord fields:**
