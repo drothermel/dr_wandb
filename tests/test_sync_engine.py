@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from dr_wandb.sync_engine import SyncEngine
 from dr_wandb.sync_policy import NoopPolicy, SyncPolicy
 from dr_wandb.sync_types import (
     ErrorAction,
+    ExportConfig,
     HistoryWindow,
     PatchPlan,
     RunDecision,
@@ -34,6 +37,10 @@ class FakeRun:
         self.config = config or {}
         self.tags = tags or []
         self.updated_at = datetime.now(UTC)
+        self.created_at = datetime.now(UTC)
+        self.metadata = {"source": "test"}
+        self.system_metrics = {"gpu": 1}
+        self.summary_metrics = {"loss": 0.1}
         self._history = history or []
         self.update_calls = 0
 
@@ -229,3 +236,96 @@ def test_abort_action_raises(tmp_path: Path):
 
     with pytest.raises(RuntimeError, match="fatal"):
         engine.sync_project("entity", "project", state_path=state_path)
+
+
+def test_export_project_jsonl_writes_manifest_and_rows(tmp_path: Path):
+    runs = [
+        FakeRun("r1", "run-1", history=[{"_step": 0, "lr": 0.1}, {"_step": 1, "lr": 0.2}]),
+        FakeRun("r2", "run-2", history=[{"_step": 0, "lr": 0.3}]),
+    ]
+    engine, _state_path = _engine_with(runs, NoopPolicy(), tmp_path / "state.json")
+    cfg = ExportConfig(
+        entity="entity",
+        project="project",
+        output_dir=tmp_path / "out-jsonl",
+        output_format="jsonl",
+        state_path=tmp_path / "state.json",
+    )
+
+    summary = engine.export_project(cfg)
+
+    assert summary.run_count == 2
+    assert summary.history_count == 3
+    assert Path(summary.runs_output_path).exists()
+    assert Path(summary.history_output_path).exists()
+    assert Path(summary.manifest_output_path).exists()
+
+    manifest = json.loads(Path(summary.manifest_output_path).read_text(encoding="utf-8"))
+    assert manifest["runs_count"] == 2
+    assert manifest["history_count"] == 3
+    assert manifest["policy_class"] == "NoopPolicy"
+
+
+def test_export_project_parquet_and_incremental_history(tmp_path: Path):
+    runs = [FakeRun("r1", "run-1", history=[{"_step": 0, "lr": 0.1}, {"_step": 1, "lr": 0.2}])]
+    state_path = tmp_path / "state.json"
+    engine, _ = _engine_with(runs, NoopPolicy(), state_path)
+    cfg = ExportConfig(
+        entity="entity",
+        project="project",
+        output_dir=tmp_path / "out-parquet",
+        output_format="parquet",
+        state_path=state_path,
+    )
+
+    first = engine.export_project(cfg)
+    second = engine.export_project(cfg)
+
+    assert first.history_count == 2
+    assert second.history_count == 0
+
+    runs_df = pd.read_parquet(first.runs_output_path)
+    history_df = pd.read_parquet(first.history_output_path)
+    assert len(runs_df) == 1
+    assert len(history_df) == 0  # second export overwrites files with incremental slice
+    assert runs_df["decision_status"].iloc[0] == "unknown"
+
+
+class ExportWindowPolicy(NoopPolicy):
+    def select_history_keys(self, ctx: SyncContext) -> list[str] | None:
+        _ = ctx
+        return ["lr"]
+
+    def select_history_window(self, ctx: SyncContext) -> HistoryWindow | None:
+        _ = ctx
+        return HistoryWindow(min_step=1)
+
+    def classify_run(
+        self, ctx: SyncContext, history_tail: list[dict[str, Any]]
+    ) -> RunDecision:
+        _ = ctx
+        return RunDecision(status="filtered", metadata={"rows": len(history_tail)})
+
+
+def test_export_project_respects_policy_keys_window_and_decision(tmp_path: Path):
+    runs = [FakeRun("r1", "run-1", history=[{"_step": 0, "lr": 0.1}, {"_step": 1, "lr": 0.2}])]
+    engine, _ = _engine_with(runs, ExportWindowPolicy(), tmp_path / "state.json")
+    cfg = ExportConfig(
+        entity="entity",
+        project="project",
+        output_dir=tmp_path / "out-filtered",
+        output_format="jsonl",
+        state_path=tmp_path / "state.json",
+    )
+
+    summary = engine.export_project(cfg)
+    runs_lines = Path(summary.runs_output_path).read_text(encoding="utf-8").strip().splitlines()
+    history_lines = Path(summary.history_output_path).read_text(encoding="utf-8").strip().splitlines()
+
+    run_row = json.loads(runs_lines[0])
+    history_row = json.loads(history_lines[0])
+    assert summary.history_count == 1
+    assert run_row["decision_status"] == "filtered"
+    assert run_row["decision_metadata"]["rows"] == 1
+    assert history_row["_step"] == 1
+    assert "lr" in history_row["metrics"]

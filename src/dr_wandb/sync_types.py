@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -100,3 +101,28 @@ class SyncSummary(BaseModel):
     processed_runs: int
     planned_patches: int
     run_evaluations: list[RunEvaluation] = Field(default_factory=list)
+
+
+class ExportConfig(BaseModel):
+    entity: str
+    project: str
+    output_dir: Path
+    output_format: Literal["parquet", "jsonl"] = "parquet"
+    runs_per_page: int = 500
+    state_path: Path | None = None
+    save_every: int = 25
+    policy_module: str = "dr_wandb.sync_policy"
+    policy_class: str = "NoopPolicy"
+
+
+class ExportSummary(BaseModel):
+    entity: str
+    project: str
+    state_path: str
+    output_format: Literal["parquet", "jsonl"]
+    runs_output_path: str
+    history_output_path: str
+    manifest_output_path: str
+    run_count: int
+    history_count: int
+    exported_at: str

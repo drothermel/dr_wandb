@@ -5,7 +5,8 @@ from typing import Any
 
 __all__ = [
     "ErrorAction",
-    "fetch_project_runs",
+    "ExportConfig",
+    "ExportSummary",
     "HistoryWindow",
     "NoopPolicy",
     "PatchPlan",
@@ -14,8 +15,6 @@ __all__ = [
     "RunCursor",
     "RunDecision",
     "RunEvaluation",
-    "serialize_history_entry",
-    "serialize_run",
     "SyncContext",
     "SyncEngine",
     "SyncPolicy",
@@ -23,13 +22,12 @@ __all__ = [
 ]
 
 _ATTR_TO_MODULE = {
-    "fetch_project_runs": "dr_wandb.fetch",
-    "serialize_history_entry": "dr_wandb.fetch",
-    "serialize_run": "dr_wandb.fetch",
     "SyncEngine": "dr_wandb.sync_engine",
     "SyncPolicy": "dr_wandb.sync_policy",
     "NoopPolicy": "dr_wandb.sync_policy",
     "ErrorAction": "dr_wandb.sync_types",
+    "ExportConfig": "dr_wandb.sync_types",
+    "ExportSummary": "dr_wandb.sync_types",
     "HistoryWindow": "dr_wandb.sync_types",
     "PatchPlan": "dr_wandb.sync_types",
     "PlannedPatch": "dr_wandb.sync_types",

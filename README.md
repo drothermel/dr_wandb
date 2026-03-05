@@ -1,6 +1,6 @@
 # dr-wandb
 
-Download Weights & Biases experiment data to local pickle or parquet files for offline analysis.
+Policy-driven sync, export, and update tooling for Weights & Biases.
 
 ## Installation
 
@@ -14,106 +14,30 @@ uv add dr-wandb
 
 ## Authentication
 
-Configure Weights & Biases authentication:
-
 ```bash
 wandb login
-```
-
-Or set the API key as an environment variable:
-
-```bash
+# or
 export WANDB_API_KEY=your_api_key_here
 ```
 
-## CLI Usage
+## CLI
+
+### Export canonical project data
 
 ```bash
-wandb-download ENTITY PROJECT OUTPUT_DIR [OPTIONS]
+wandb-export ENTITY PROJECT OUTPUT_DIR [OPTIONS]
 
 Options:
-  --output-format  [pkl|parquet]  Output format (default: pkl)
-  --runs-only                     Download only run metadata, skip histories
-  --runs-per-page  INTEGER        Runs to fetch per API call (default: 500)
-  --log-every      INTEGER        Log progress every N runs (default: 20)
+  --output-format  [parquet|jsonl]  Output format (default: parquet)
+  --runs-per-page  INTEGER          Runs fetched per API call (default: 500)
+  --state-path     TEXT             Optional explicit sync state path
+  --save-every     INTEGER          Persist state every N runs (default: 25)
+  --policy-module  TEXT             Policy module (default: dr_wandb.sync_policy)
+  --policy-class   TEXT             Policy class (default: NoopPolicy)
+  --output-json    TEXT             Optional summary output path
 ```
 
-### Examples
-
-Download runs and histories as pickle files:
-```bash
-wandb-download my-team my-project ./data
-```
-
-Download as parquet files:
-```bash
-wandb-download my-team my-project ./data --output-format parquet
-```
-
-Download only run metadata (skip histories):
-```bash
-wandb-download my-team my-project ./data --runs-only
-```
-
-### Output Files
-
-**Pickle format (default):**
-- `{entity}_{project}_runs.pkl` - List of run dictionaries
-- `{entity}_{project}_histories.pkl` - List of history entry lists per run
-
-**Parquet format:**
-- `{entity}_{project}_runs.parquet` - Run metadata as DataFrame
-- `{entity}_{project}_histories.parquet` - All history entries flattened
-
-## Library Usage
-
-```python
-from dr_wandb import fetch_project_runs, serialize_run, serialize_history_entry
-
-# Fetch all runs and histories
-runs, histories = fetch_project_runs(
-    entity="my-team",
-    project="my-project",
-    include_history=True,
-)
-
-# Each run is a dict with keys:
-# run_id, run_name, state, project, entity, created_at,
-# config, summary, wandb_metadata, system_metrics, system_attrs, sweep_info
-
-# Each history entry is a dict with keys:
-# run_id, step, timestamp, runtime, wandb_metadata, metrics
-```
-
-### Pydantic Models
-
-The library uses pydantic models for type-safe data handling:
-
-```python
-from dr_wandb.run_record import RunRecord
-from dr_wandb.history_entry_record import HistoryEntryRecord
-
-# Convert a wandb run to a typed record
-record = RunRecord.from_wandb_run(wandb_run)
-data = record.model_dump()  # Get as dict
-json_str = record.model_dump_json()  # Get as JSON string
-```
-
-## Policy-Driven Sync Engine
-
-`dr_wandb` includes a generic sync/update engine that is domain-agnostic.
-Consumers provide policy hooks for classification and patch inference.
-
-```python
-from dr_wandb.sync_engine import SyncEngine
-from dr_wandb.sync_policy import NoopPolicy
-
-engine = SyncEngine(policy=NoopPolicy())
-summary = engine.sync_project(entity="my-team", project="my-project")
-print(summary.processed_runs)
-```
-
-### CLI commands
+### Sync + patch workflows
 
 ```bash
 wandb-sync ENTITY PROJECT --policy-module my_pkg.my_policy --policy-class MyPolicy
@@ -122,9 +46,32 @@ wandb-apply-patches ./patches.jsonl            # dry-run
 wandb-apply-patches ./patches.jsonl --apply    # writes updates
 ```
 
-### Custom policy shape
+## Library usage
 
-Implement a policy class with hooks:
+```python
+from pathlib import Path
+
+from dr_wandb.sync_engine import SyncEngine
+from dr_wandb.sync_policy import NoopPolicy
+from dr_wandb.sync_types import ExportConfig
+
+engine = SyncEngine(policy=NoopPolicy())
+summary = engine.export_project(
+    ExportConfig(
+        entity="my-team",
+        project="my-project",
+        output_dir=Path("./data"),
+        output_format="parquet",
+    )
+)
+
+print(summary.run_count, summary.history_count)
+```
+
+## Core concepts
+
+### `SyncPolicy`
+A policy controls data retrieval and decision logic:
 - `select_history_keys(ctx)`
 - `select_history_window(ctx)`
 - `classify_run(ctx, history_tail)`
@@ -132,33 +79,11 @@ Implement a policy class with hooks:
 - `should_update(ctx, patch)`
 - `on_error(ctx, exc)`
 
-## Data Schema
-
-**RunRecord fields:**
-| Field | Type | Description |
-|-------|------|-------------|
-| run_id | str | Unique run identifier |
-| run_name | str | Human-readable run name |
-| state | str | finished, running, crashed, failed, killed |
-| project | str | Project name |
-| entity | str | Entity (user/team) name |
-| created_at | datetime | Run creation timestamp |
-| config | dict | Experiment configuration |
-| summary | dict | Final metrics and outputs |
-| wandb_metadata | dict | Platform metadata |
-| system_metrics | dict | Hardware/system info |
-| system_attrs | dict | Additional system attributes |
-| sweep_info | dict | Hyperparameter sweep info |
-
-**HistoryEntryRecord fields:**
-| Field | Type | Description |
-|-------|------|-------------|
-| run_id | str | Parent run identifier |
-| step | int \| None | Training step number |
-| timestamp | datetime \| None | Time of logging |
-| runtime | int \| None | Seconds since run start |
-| wandb_metadata | dict | Platform logging metadata |
-| metrics | dict | All logged metrics |
+### Canonical export outputs
+`wandb-export` writes:
+- runs table: one row per run with run payload + policy/cursor fields
+- history table: one row per history event with `_step`/`_timestamp`/`_runtime`/`_wandb` + metric payload
+- manifest JSON: schema/version, policy identity, counts, and file paths
 
 ## License
 

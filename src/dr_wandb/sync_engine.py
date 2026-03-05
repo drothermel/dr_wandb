@@ -8,12 +8,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, cast
 
+import pandas as pd
+
 from dr_wandb.patch_ops import apply_run_patch
 from dr_wandb.sync_policy import NoopPolicy, SyncPolicy
 from dr_wandb.sync_state import default_state_path, load_state, save_state
 from dr_wandb.sync_types import (
     ApplyResult,
     ErrorAction,
+    ExportConfig,
+    ExportSummary,
     HistoryWindow,
     PatchPlan,
     PlannedPatch,
@@ -24,6 +28,7 @@ from dr_wandb.sync_types import (
     SyncContext,
     SyncSummary,
 )
+from dr_wandb.utils import safe_convert_for_parquet
 
 
 def load_policy(policy_module: str, policy_class: str) -> SyncPolicy:
@@ -60,6 +65,93 @@ def read_patch_jsonl(input_path: Path) -> list[PlannedPatch]:
                 continue
             plans.append(PlannedPatch.model_validate(json.loads(stripped)))
     return plans
+
+
+def _serialize_timestamp(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat()
+    return str(value)
+
+
+def _to_jsonable(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, dict):
+        return {str(k): _to_jsonable(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_to_jsonable(v) for v in value]
+    return value
+
+
+def _serialize_run_row(
+    run: Any,
+    *,
+    entity: str,
+    project: str,
+    decision: RunDecision,
+    cursor: RunCursor,
+) -> dict[str, Any]:
+    summary = getattr(run, "summary", None)
+    if summary is None:
+        summary = getattr(run, "summary_metrics", None)
+    summary_dict = dict(summary) if summary else {}
+
+    config_dict = dict(getattr(run, "config", {}) or {})
+    metadata_dict = dict(getattr(run, "metadata", {}) or {})
+    system_metrics_dict = dict(getattr(run, "system_metrics", {}) or {})
+    system_attrs: dict[str, Any] = {}
+    if config_dict:
+        system_attrs["config"] = config_dict
+    if summary_dict:
+        system_attrs["summary_metrics"] = summary_dict
+    if metadata_dict:
+        system_attrs["metadata"] = metadata_dict
+    if system_metrics_dict:
+        system_attrs["system_metrics"] = system_metrics_dict
+
+    row = {
+        "run_id": getattr(run, "id", ""),
+        "run_name": getattr(run, "name", ""),
+        "state": getattr(run, "state", None),
+        "entity": entity,
+        "project": project,
+        "created_at": _serialize_timestamp(getattr(run, "created_at", None)),
+        "updated_at": _serialize_timestamp(getattr(run, "updated_at", None)),
+        "config": config_dict,
+        "summary": summary_dict,
+        "wandb_metadata": metadata_dict,
+        "system_metrics": system_metrics_dict,
+        "system_attrs": system_attrs,
+        "sweep_info": {
+            "sweep_id": getattr(run, "sweep_id", None),
+            "sweep_url": getattr(run, "sweep_url", None),
+        },
+        "decision_status": decision.status,
+        "decision_reason": decision.reason,
+        "decision_metadata": decision.metadata,
+        "history_seen": cursor.history_seen,
+        "last_step": cursor.last_step,
+    }
+    return _to_jsonable(row)
+
+
+def _serialize_history_row(run_id: str, history_entry: dict[str, Any]) -> dict[str, Any]:
+    metrics = {
+        str(key): value
+        for key, value in history_entry.items()
+        if not str(key).startswith("_")
+    }
+    row = {
+        "run_id": run_id,
+        "_step": history_entry.get("_step"),
+        "_timestamp": history_entry.get("_timestamp"),
+        "_runtime": history_entry.get("_runtime"),
+        "_wandb": history_entry.get("_wandb", {}),
+        "metrics": metrics,
+    }
+    return _to_jsonable(row)
 
 
 class SyncEngine:
@@ -119,6 +211,11 @@ class SyncEngine:
             return HistoryWindow(min_step=ctx.cursor.last_step + 1)
         return None
 
+    def _default_export_window(self, ctx: SyncContext) -> HistoryWindow:
+        if ctx.cursor and ctx.cursor.last_step is not None:
+            return HistoryWindow(min_step=ctx.cursor.last_step + 1)
+        return HistoryWindow()
+
     def _scan_history(
         self,
         ctx: SyncContext,
@@ -158,7 +255,12 @@ class SyncEngine:
                 max_step = step if max_step is None else max(max_step, step)
         return max_step
 
-    def _evaluate_run(self, ctx: SyncContext) -> tuple[RunDecision, PatchPlan | None, list[dict[str, Any]]]:
+    def _evaluate_run(
+        self,
+        ctx: SyncContext,
+        *,
+        include_history_when_unspecified: bool = False,
+    ) -> tuple[RunDecision, PatchPlan | None, list[dict[str, Any]]]:
         selected_keys = self._with_retry(
             ctx,
             lambda: self.policy.select_history_keys(ctx),
@@ -172,6 +274,9 @@ class SyncEngine:
 
         if selected_window is None:
             selected_window = self._default_window(ctx)
+
+        if include_history_when_unspecified and selected_window is None and selected_keys is None:
+            selected_window = self._default_export_window(ctx)
 
         history_tail = self._scan_history(ctx, keys=selected_keys, window=selected_window)
 
@@ -367,3 +472,130 @@ class SyncEngine:
             results.append(result)
 
         return results
+
+    def _write_export_outputs(
+        self,
+        *,
+        config: ExportConfig,
+        run_rows: list[dict[str, Any]],
+        history_rows: list[dict[str, Any]],
+        exported_at: str,
+    ) -> tuple[Path, Path, Path]:
+        output_dir = Path(config.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        base = f"{config.entity}_{config.project}"
+        if config.output_format == "parquet":
+            runs_path = output_dir / f"{base}_runs.parquet"
+            history_path = output_dir / f"{base}_history.parquet"
+
+            runs_df = safe_convert_for_parquet(pd.DataFrame(run_rows))
+            history_df = safe_convert_for_parquet(pd.DataFrame(history_rows))
+            runs_df.to_parquet(runs_path)
+            history_df.to_parquet(history_path)
+        else:
+            runs_path = output_dir / f"{base}_runs.jsonl"
+            history_path = output_dir / f"{base}_history.jsonl"
+            with open(runs_path, "w", encoding="utf-8") as f:
+                for row in run_rows:
+                    f.write(
+                        json.dumps(_to_jsonable(row), sort_keys=True, default=str) + "\n"
+                    )
+            with open(history_path, "w", encoding="utf-8") as f:
+                for row in history_rows:
+                    f.write(
+                        json.dumps(_to_jsonable(row), sort_keys=True, default=str)
+                        + "\n"
+                    )
+
+        manifest_path = output_dir / f"{base}_manifest.json"
+        manifest = {
+            "schema_version": 1,
+            "entity": config.entity,
+            "project": config.project,
+            "output_format": config.output_format,
+            "policy_module": self.policy.__class__.__module__,
+            "policy_class": self.policy.__class__.__name__,
+            "exported_at": exported_at,
+            "runs_count": len(run_rows),
+            "history_count": len(history_rows),
+            "files": {
+                "runs": str(runs_path),
+                "history": str(history_path),
+            },
+        }
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
+
+        return runs_path, history_path, manifest_path
+
+    def export_project(self, config: ExportConfig) -> ExportSummary:
+        resolved_state_path = config.state_path or default_state_path(config.entity, config.project)
+        state = load_state(resolved_state_path, entity=config.entity, project=config.project)
+
+        api = self._api_factory()
+        runs_obj = api.runs(f"{config.entity}/{config.project}", per_page=config.runs_per_page)
+
+        run_rows: list[dict[str, Any]] = []
+        history_rows: list[dict[str, Any]] = []
+        processed_runs = 0
+
+        for run in runs_obj:
+            processed_runs += 1
+            cursor = state.runs.get(run.id)
+            ctx = SyncContext(
+                entity=config.entity,
+                project=config.project,
+                run_id=run.id,
+                run_name=run.name,
+                run_state=getattr(run, "state", None),
+                run_updated_at=self._coerce_run_updated_at(run),
+                run=run,
+                cursor=cursor,
+            )
+
+            decision, _patch, history_tail = self._evaluate_run(
+                ctx,
+                include_history_when_unspecified=True,
+            )
+            self._update_cursor(state, ctx, decision, history_tail)
+            updated_cursor = state.runs[ctx.run_id]
+            run_rows.append(
+                _serialize_run_row(
+                    run,
+                    entity=config.entity,
+                    project=config.project,
+                    decision=decision,
+                    cursor=updated_cursor,
+                )
+            )
+            history_rows.extend(
+                _serialize_history_row(ctx.run_id, entry) for entry in history_tail
+            )
+
+            if processed_runs % config.save_every == 0:
+                state.last_synced_at = datetime.now(timezone.utc).isoformat()
+                save_state(state, resolved_state_path)
+
+        exported_at = datetime.now(timezone.utc).isoformat()
+        state.last_synced_at = exported_at
+        save_state(state, resolved_state_path)
+
+        runs_path, history_path, manifest_path = self._write_export_outputs(
+            config=config,
+            run_rows=run_rows,
+            history_rows=history_rows,
+            exported_at=exported_at,
+        )
+
+        return ExportSummary(
+            entity=config.entity,
+            project=config.project,
+            state_path=str(resolved_state_path),
+            output_format=config.output_format,
+            runs_output_path=str(runs_path),
+            history_output_path=str(history_path),
+            manifest_output_path=str(manifest_path),
+            run_count=len(run_rows),
+            history_count=len(history_rows),
+            exported_at=exported_at,
+        )
