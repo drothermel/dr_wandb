@@ -26,6 +26,10 @@ def export_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runs-per-page", type=int, default=500)
     parser.add_argument("--state-path")
     parser.add_argument("--save-every", type=int, default=25)
+    parser.add_argument("--checkpoint-every-runs", type=int, default=25)
+    parser.add_argument("--no-incremental", action="store_true")
+    parser.add_argument("--no-finalize-compact", action="store_true")
+    parser.add_argument("--inspection-sample-rows", type=int, default=5)
     parser.add_argument("--policy-module", default="dr_wandb.sync_policy")
     parser.add_argument("--policy-class", default="NoopPolicy")
     parser.add_argument("--output-json")
@@ -44,16 +48,23 @@ def export_main(argv: list[str] | None = None) -> int:
         runs_per_page=args.runs_per_page,
         state_path=Path(args.state_path) if args.state_path else None,
         save_every=args.save_every,
+        incremental=not args.no_incremental,
+        checkpoint_every_runs=args.checkpoint_every_runs,
+        finalize_compact=not args.no_finalize_compact,
+        inspection_sample_rows=args.inspection_sample_rows,
         policy_module=args.policy_module,
         policy_class=args.policy_class,
     )
     logging.info(
-        "Starting wandb export for %s/%s (format=%s, runs_per_page=%s, save_every=%s)",
+        "Starting wandb export for %s/%s (format=%s, runs_per_page=%s, save_every=%s, incremental=%s, checkpoint_every_runs=%s, finalize_compact=%s)",
         cfg.entity,
         cfg.project,
         cfg.output_format,
         cfg.runs_per_page,
         cfg.save_every,
+        cfg.incremental,
+        cfg.checkpoint_every_runs,
+        cfg.finalize_compact,
     )
     logging.info(
         "Using policy %s.%s with state path %s",

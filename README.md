@@ -32,10 +32,22 @@ Options:
   --runs-per-page  INTEGER          Runs fetched per API call (default: 500)
   --state-path     TEXT             Optional explicit sync state path
   --save-every     INTEGER          Persist state every N runs (default: 25)
+  --checkpoint-every-runs INTEGER   Write checkpoint chunk every N runs (default: 25)
+  --no-incremental                  Disable checkpointed export (legacy single-shot output)
+  --no-finalize-compact             Keep checkpoint chunks only (skip compact final tables)
+  --inspection-sample-rows INTEGER  Sample size for per-checkpoint inspection stats (default: 5)
   --policy-module  TEXT             Policy module (default: dr_wandb.sync_policy)
   --policy-class   TEXT             Policy class (default: NoopPolicy)
   --output-json    TEXT             Optional summary output path
 ```
+
+`wandb-export` now uses incremental checkpointing by default. During export it writes:
+- `OUTPUT_DIR/_checkpoints/runs/chunk-*.parquet`
+- `OUTPUT_DIR/_checkpoints/history/chunk-*.parquet`
+- `OUTPUT_DIR/_checkpoints/manifest.json`
+- `OUTPUT_DIR/_checkpoints/inspection.jsonl`
+
+The job can resume after interruption using the same `--state-path`, and final compact outputs are deduplicated from checkpoint chunks.
 
 ### Sync + patch workflows
 

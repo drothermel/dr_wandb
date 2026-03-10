@@ -111,8 +111,53 @@ class ExportConfig(BaseModel):
     runs_per_page: int = 500
     state_path: Path | None = None
     save_every: int = 25
+    incremental: bool = True
+    checkpoint_every_runs: int = 25
+    checkpoint_dirname: str = "_checkpoints"
+    finalize_compact: bool = True
+    inspection_sample_rows: int = 5
     policy_module: str = "dr_wandb.sync_policy"
     policy_class: str = "NoopPolicy"
+
+
+class CheckpointRecord(BaseModel):
+    checkpoint_id: int
+    created_at: str
+    run_rows: int
+    history_rows: int
+    cumulative_run_rows: int
+    cumulative_history_rows: int
+    run_start_index: int
+    run_end_index: int
+    run_ids: list[str] = Field(default_factory=list)
+    run_names: list[str] = Field(default_factory=list)
+    metric_keys_sample: list[str] = Field(default_factory=list)
+    step_min: int | None = None
+    step_max: int | None = None
+    runs_file: str
+    history_file: str
+    record_file: str
+    state_hash: str
+
+
+class CheckpointManifest(BaseModel):
+    schema_version: int = 1
+    entity: str
+    project: str
+    output_format: Literal["parquet", "jsonl"] = "parquet"
+    policy_module: str = ""
+    policy_class: str = ""
+    created_at: str
+    updated_at: str
+    status: Literal["in_progress", "completed", "completed_no_compact"] = "in_progress"
+    checkpoint_dir: str
+    runs_dir: str
+    history_dir: str
+    inspection_path: str
+    total_run_rows: int = 0
+    total_history_rows: int = 0
+    last_checkpoint_id: int = 0
+    checkpoints: list[CheckpointRecord] = Field(default_factory=list)
 
 
 class ExportSummary(BaseModel):
@@ -126,3 +171,8 @@ class ExportSummary(BaseModel):
     run_count: int
     history_count: int
     exported_at: str
+    checkpoint_count: int = 0
+    checkpoint_manifest_path: str = ""
+    finalized: bool = True
+    partial_run_count: int = 0
+    partial_history_count: int = 0

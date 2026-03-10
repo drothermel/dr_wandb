@@ -11,6 +11,7 @@ import pytest
 from dr_wandb.sync_engine import SyncEngine
 from dr_wandb.sync_policy import NoopPolicy, SyncPolicy
 from dr_wandb.sync_types import (
+    CheckpointManifest,
     ErrorAction,
     ExportConfig,
     HistoryWindow,
@@ -298,14 +299,24 @@ def test_export_project_jsonl_writes_manifest_and_rows(tmp_path: Path):
 
     assert summary.run_count == 2
     assert summary.history_count == 3
+    assert summary.checkpoint_count == 1
+    assert summary.finalized is True
     assert Path(summary.runs_output_path).exists()
     assert Path(summary.history_output_path).exists()
     assert Path(summary.manifest_output_path).exists()
+    assert Path(summary.checkpoint_manifest_path).exists()
 
     manifest = json.loads(Path(summary.manifest_output_path).read_text(encoding="utf-8"))
     assert manifest["runs_count"] == 2
     assert manifest["history_count"] == 3
     assert manifest["policy_class"] == "NoopPolicy"
+
+    checkpoint_manifest = CheckpointManifest.model_validate(
+        json.loads(Path(summary.checkpoint_manifest_path).read_text(encoding="utf-8"))
+    )
+    assert checkpoint_manifest.total_run_rows == 2
+    assert checkpoint_manifest.total_history_rows == 3
+    assert checkpoint_manifest.status == "completed"
 
 
 def test_export_project_parquet_and_incremental_history(tmp_path: Path):
@@ -324,12 +335,12 @@ def test_export_project_parquet_and_incremental_history(tmp_path: Path):
     second = engine.export_project(cfg)
 
     assert first.history_count == 2
-    assert second.history_count == 0
+    assert second.history_count == 2
 
     runs_df = pd.read_parquet(first.runs_output_path)
     history_df = pd.read_parquet(first.history_output_path)
     assert len(runs_df) == 1
-    assert len(history_df) == 0  # second export overwrites files with incremental slice
+    assert len(history_df) == 2
     assert runs_df["decision_status"].iloc[0] == "unknown"
 
 
@@ -423,3 +434,113 @@ def test_sync_project_raises_resolver_error_when_lookup_and_listing_fail(tmp_pat
 
     with pytest.raises(ValueError, match="Direct lookup failed"):
         engine.sync_project("ml-moe", "moe", state_path=state_path)
+
+
+def test_export_project_writes_checkpoint_stats_and_inspection(tmp_path: Path):
+    runs = [
+        FakeRun("r1", "run-1", history=[{"_step": 0, "lr": 0.1}]),
+        FakeRun("r2", "run-2", history=[{"_step": 0, "lr": 0.2}]),
+        FakeRun("r3", "run-3", history=[{"_step": 0, "lr": 0.3}]),
+    ]
+    engine, _ = _engine_with(runs, NoopPolicy(), tmp_path / "state.json")
+    cfg = ExportConfig(
+        entity="entity",
+        project="project",
+        output_dir=tmp_path / "out-checkpoint",
+        output_format="parquet",
+        state_path=tmp_path / "state.json",
+        checkpoint_every_runs=2,
+    )
+
+    summary = engine.export_project(cfg)
+
+    checkpoint_manifest = CheckpointManifest.model_validate(
+        json.loads(Path(summary.checkpoint_manifest_path).read_text(encoding="utf-8"))
+    )
+    assert summary.checkpoint_count == 2
+    assert checkpoint_manifest.total_run_rows == 3
+    assert checkpoint_manifest.total_history_rows == 3
+    assert checkpoint_manifest.total_run_rows == sum(
+        record.run_rows for record in checkpoint_manifest.checkpoints
+    )
+    assert checkpoint_manifest.total_history_rows == sum(
+        record.history_rows for record in checkpoint_manifest.checkpoints
+    )
+
+    inspection_path = Path(checkpoint_manifest.inspection_path)
+    lines = inspection_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == summary.checkpoint_count
+    payload = json.loads(lines[0])
+    assert payload["checkpoint_id"] == 1
+    assert payload["cumulative_run_rows"] >= 1
+
+
+def test_export_project_resume_after_state_save_failure_dedupes_final_outputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    runs = [
+        FakeRun("r1", "run-1", history=[{"_step": 0, "lr": 0.1}]),
+        FakeRun("r2", "run-2", history=[{"_step": 0, "lr": 0.2}]),
+    ]
+    state_path = tmp_path / "state.json"
+    engine, _ = _engine_with(runs, NoopPolicy(), state_path)
+    cfg = ExportConfig(
+        entity="entity",
+        project="project",
+        output_dir=tmp_path / "out-resume",
+        output_format="parquet",
+        state_path=state_path,
+        checkpoint_every_runs=1,
+    )
+
+    from dr_wandb import sync_engine as sync_engine_module
+
+    original_save_state = sync_engine_module.save_state
+    calls = {"count": 0}
+
+    def flaky_save_state(state, path):  # noqa: ANN001
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("simulated save failure")
+        return original_save_state(state, path)
+
+    monkeypatch.setattr(sync_engine_module, "save_state", flaky_save_state)
+    with pytest.raises(RuntimeError, match="simulated save failure"):
+        engine.export_project(cfg)
+
+    monkeypatch.setattr(sync_engine_module, "save_state", original_save_state)
+    summary = engine.export_project(cfg)
+
+    runs_df = pd.read_parquet(summary.runs_output_path)
+    history_df = pd.read_parquet(summary.history_output_path)
+    assert summary.partial_run_count >= 3
+    assert summary.run_count == 2
+    assert summary.history_count == 2
+    assert len(runs_df) == 2
+    assert len(history_df) == 2
+
+
+def test_export_project_no_finalize_compact_keeps_checkpoint_outputs(tmp_path: Path):
+    runs = [FakeRun("r1", "run-1", history=[{"_step": 0, "lr": 0.1}])]
+    engine, _ = _engine_with(runs, NoopPolicy(), tmp_path / "state.json")
+    cfg = ExportConfig(
+        entity="entity",
+        project="project",
+        output_dir=tmp_path / "out-no-finalize",
+        output_format="parquet",
+        state_path=tmp_path / "state.json",
+        finalize_compact=False,
+    )
+
+    summary = engine.export_project(cfg)
+
+    checkpoint_manifest = CheckpointManifest.model_validate(
+        json.loads(Path(summary.checkpoint_manifest_path).read_text(encoding="utf-8"))
+    )
+    assert summary.finalized is False
+    assert summary.run_count == 1
+    assert summary.history_count == 1
+    assert checkpoint_manifest.status == "completed_no_compact"
+    assert Path(summary.runs_output_path).is_dir()
+    assert Path(summary.history_output_path).is_dir()

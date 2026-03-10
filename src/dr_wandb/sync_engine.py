@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import importlib
+import hashlib
 import json
 import logging
+import os
 import re
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +19,8 @@ from dr_wandb.sync_policy import NoopPolicy, SyncPolicy
 from dr_wandb.sync_state import default_state_path, load_state, save_state
 from dr_wandb.sync_types import (
     ApplyResult,
+    CheckpointManifest,
+    CheckpointRecord,
     ErrorAction,
     ExportConfig,
     ExportSummary,
@@ -153,6 +158,381 @@ def _serialize_history_row(run_id: str, history_entry: dict[str, Any]) -> dict[s
         "metrics": metrics,
     }
     return _to_jsonable(row)
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=path.name,
+        suffix=".tmp",
+        delete=False,
+    ) as tmp_file:
+        json.dump(payload, tmp_file, indent=2, sort_keys=True)
+        tmp_file.flush()
+        os.fsync(tmp_file.fileno())
+        tmp_name = tmp_file.name
+    os.replace(tmp_name, path)
+
+
+def _atomic_write_rows(
+    *,
+    rows: list[dict[str, Any]],
+    path: Path,
+    output_format: str,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if output_format == "parquet":
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=path.name,
+            suffix=".tmp",
+            delete=False,
+        ) as tmp_file:
+            tmp_path = Path(tmp_file.name)
+        df = safe_convert_for_parquet(pd.DataFrame(rows))
+        df.to_parquet(tmp_path)
+        with open(tmp_path, "rb") as f:
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+        return
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=path.name,
+        suffix=".tmp",
+        delete=False,
+    ) as tmp_file:
+        for row in rows:
+            tmp_file.write(json.dumps(_to_jsonable(row), sort_keys=True, default=str) + "\n")
+        tmp_file.flush()
+        os.fsync(tmp_file.fileno())
+        tmp_name = tmp_file.name
+    os.replace(tmp_name, path)
+
+
+def _state_hash(state: ProjectSyncState) -> str:
+    payload = json.dumps(state.model_dump(mode="python"), sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _history_metrics_hash(value: Any) -> str:
+    payload = json.dumps(_to_jsonable(value), sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+class _IncrementalExportWriter:
+    def __init__(self, *, config: ExportConfig, policy: SyncPolicy) -> None:
+        self.config = config
+        self.policy = policy
+        self.output_dir = Path(config.output_dir)
+        self.checkpoint_root = self.output_dir / config.checkpoint_dirname
+        self.runs_dir = self.checkpoint_root / "runs"
+        self.history_dir = self.checkpoint_root / "history"
+        self.manifest_path = self.checkpoint_root / "manifest.json"
+        self.inspection_path = self.checkpoint_root / "inspection.jsonl"
+        self._manifest: CheckpointManifest | None = None
+
+    @property
+    def manifest(self) -> CheckpointManifest:
+        if self._manifest is None:
+            raise RuntimeError("begin_export() must be called before accessing manifest")
+        return self._manifest
+
+    def _chunk_extension(self) -> str:
+        return ".parquet" if self.config.output_format == "parquet" else ".jsonl"
+
+    def _save_manifest(self) -> None:
+        _atomic_write_json(
+            self.manifest_path,
+            self.manifest.model_dump(mode="python"),
+        )
+
+    def begin_export(self) -> CheckpointManifest:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.checkpoint_root.mkdir(parents=True, exist_ok=True)
+        self.runs_dir.mkdir(parents=True, exist_ok=True)
+        self.history_dir.mkdir(parents=True, exist_ok=True)
+
+        now = _utc_now_iso()
+        if self.manifest_path.exists():
+            raw = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+            manifest = CheckpointManifest.model_validate(raw)
+            if manifest.entity != self.config.entity or manifest.project != self.config.project:
+                raise ValueError(
+                    "Checkpoint manifest entity/project mismatch: "
+                    f"found {manifest.entity}/{manifest.project}, expected "
+                    f"{self.config.entity}/{self.config.project}"
+                )
+            if manifest.output_format != self.config.output_format:
+                raise ValueError(
+                    "Checkpoint manifest output format mismatch: "
+                    f"found {manifest.output_format}, expected {self.config.output_format}"
+                )
+            manifest.status = "in_progress"
+            manifest.updated_at = now
+            manifest.policy_module = self.policy.__class__.__module__
+            manifest.policy_class = self.policy.__class__.__name__
+            self._manifest = manifest
+            self._save_manifest()
+            return manifest
+
+        manifest = CheckpointManifest(
+            entity=self.config.entity,
+            project=self.config.project,
+            output_format=self.config.output_format,
+            policy_module=self.policy.__class__.__module__,
+            policy_class=self.policy.__class__.__name__,
+            created_at=now,
+            updated_at=now,
+            checkpoint_dir=str(self.checkpoint_root),
+            runs_dir=str(self.runs_dir),
+            history_dir=str(self.history_dir),
+            inspection_path=str(self.inspection_path),
+        )
+        self._manifest = manifest
+        self._save_manifest()
+        return manifest
+
+    def write_checkpoint(
+        self,
+        *,
+        run_rows_batch: list[dict[str, Any]],
+        history_rows_batch: list[dict[str, Any]],
+        run_start_index: int,
+        run_end_index: int,
+        state_hash: str,
+    ) -> CheckpointRecord:
+        checkpoint_id = self.manifest.last_checkpoint_id + 1
+        extension = self._chunk_extension()
+        runs_file = self.runs_dir / f"chunk-{checkpoint_id:06d}{extension}"
+        history_file = self.history_dir / f"chunk-{checkpoint_id:06d}{extension}"
+        record_file = self.checkpoint_root / f"checkpoint-{checkpoint_id:06d}.json"
+
+        _atomic_write_rows(
+            rows=run_rows_batch,
+            path=runs_file,
+            output_format=self.config.output_format,
+        )
+        _atomic_write_rows(
+            rows=history_rows_batch,
+            path=history_file,
+            output_format=self.config.output_format,
+        )
+
+        step_values = [
+            entry.get("_step")
+            for entry in history_rows_batch
+            if isinstance(entry.get("_step"), int)
+        ]
+        metric_keys: set[str] = set()
+        for entry in history_rows_batch:
+            metrics = entry.get("metrics", {})
+            if isinstance(metrics, dict):
+                metric_keys.update(str(key) for key in metrics)
+
+        record = CheckpointRecord(
+            checkpoint_id=checkpoint_id,
+            created_at=_utc_now_iso(),
+            run_rows=len(run_rows_batch),
+            history_rows=len(history_rows_batch),
+            cumulative_run_rows=self.manifest.total_run_rows + len(run_rows_batch),
+            cumulative_history_rows=self.manifest.total_history_rows + len(history_rows_batch),
+            run_start_index=run_start_index,
+            run_end_index=run_end_index,
+            run_ids=[
+                str(row.get("run_id", ""))
+                for row in run_rows_batch[: self.config.inspection_sample_rows]
+            ],
+            run_names=[
+                str(row.get("run_name", ""))
+                for row in run_rows_batch[: self.config.inspection_sample_rows]
+            ],
+            metric_keys_sample=sorted(metric_keys)[: self.config.inspection_sample_rows],
+            step_min=min(step_values) if step_values else None,
+            step_max=max(step_values) if step_values else None,
+            runs_file=str(runs_file),
+            history_file=str(history_file),
+            record_file=str(record_file),
+            state_hash=state_hash,
+        )
+        _atomic_write_json(record_file, record.model_dump(mode="python"))
+        return record
+
+    def commit_checkpoint(
+        self,
+        record: CheckpointRecord,
+        *,
+        processed_runs: int,
+        elapsed_seconds: float,
+        checkpoint_elapsed_seconds: float,
+    ) -> CheckpointManifest:
+        manifest = self.manifest
+        manifest.checkpoints.append(record)
+        manifest.last_checkpoint_id = record.checkpoint_id
+        manifest.total_run_rows = record.cumulative_run_rows
+        manifest.total_history_rows = record.cumulative_history_rows
+        manifest.updated_at = _utc_now_iso()
+        manifest.status = "in_progress"
+        self._save_manifest()
+
+        runs_per_second = (
+            record.run_rows / checkpoint_elapsed_seconds if checkpoint_elapsed_seconds > 0 else 0.0
+        )
+        history_rows_per_second = (
+            record.history_rows / checkpoint_elapsed_seconds
+            if checkpoint_elapsed_seconds > 0
+            else 0.0
+        )
+        total_runs_per_second = processed_runs / elapsed_seconds if elapsed_seconds > 0 else 0.0
+        total_history_per_second = (
+            manifest.total_history_rows / elapsed_seconds if elapsed_seconds > 0 else 0.0
+        )
+        inspection_payload = {
+            "checkpoint_id": record.checkpoint_id,
+            "created_at": record.created_at,
+            "run_rows": record.run_rows,
+            "history_rows": record.history_rows,
+            "cumulative_run_rows": record.cumulative_run_rows,
+            "cumulative_history_rows": record.cumulative_history_rows,
+            "run_start_index": record.run_start_index,
+            "run_end_index": record.run_end_index,
+            "run_ids": record.run_ids,
+            "run_names": record.run_names,
+            "metric_keys_sample": record.metric_keys_sample,
+            "step_min": record.step_min,
+            "step_max": record.step_max,
+            "checkpoint_runs_per_second": runs_per_second,
+            "checkpoint_history_rows_per_second": history_rows_per_second,
+            "total_runs_per_second": total_runs_per_second,
+            "total_history_rows_per_second": total_history_per_second,
+        }
+        with open(self.inspection_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(inspection_payload, sort_keys=True) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        return manifest
+
+    def _load_chunk_frames(self) -> tuple[pd.DataFrame, pd.DataFrame]:
+        run_frames: list[pd.DataFrame] = []
+        history_frames: list[pd.DataFrame] = []
+
+        for record in self.manifest.checkpoints:
+            runs_file = Path(record.runs_file)
+            history_file = Path(record.history_file)
+            if self.config.output_format == "parquet":
+                if runs_file.exists():
+                    run_frames.append(pd.read_parquet(runs_file))
+                if history_file.exists():
+                    history_frames.append(pd.read_parquet(history_file))
+                continue
+
+            if runs_file.exists():
+                if runs_file.stat().st_size > 0:
+                    run_frames.append(pd.read_json(runs_file, lines=True))
+                else:
+                    run_frames.append(pd.DataFrame())
+            if history_file.exists():
+                if history_file.stat().st_size > 0:
+                    history_frames.append(pd.read_json(history_file, lines=True))
+                else:
+                    history_frames.append(pd.DataFrame())
+
+        runs_df = pd.concat(run_frames, ignore_index=True) if run_frames else pd.DataFrame()
+        history_df = (
+            pd.concat(history_frames, ignore_index=True) if history_frames else pd.DataFrame()
+        )
+        return runs_df, history_df
+
+    def _dedupe_runs(self, runs_df: pd.DataFrame) -> pd.DataFrame:
+        if runs_df.empty:
+            return runs_df
+        if "run_id" not in runs_df.columns:
+            return runs_df
+        return runs_df.drop_duplicates(subset=["run_id"], keep="last").reset_index(drop=True)
+
+    def _dedupe_history(self, history_df: pd.DataFrame) -> pd.DataFrame:
+        if history_df.empty:
+            return history_df
+        if "metrics" in history_df.columns:
+            history_df = history_df.copy()
+            history_df["_metrics_hash"] = history_df["metrics"].apply(_history_metrics_hash)
+
+        dedupe_subset: list[str]
+        has_run_id = "run_id" in history_df.columns
+        has_step = "_step" in history_df.columns
+        has_timestamp = "_timestamp" in history_df.columns
+        has_metrics_hash = "_metrics_hash" in history_df.columns
+
+        if has_run_id and has_step and has_timestamp and has_metrics_hash:
+            dedupe_subset = ["run_id", "_step", "_timestamp", "_metrics_hash"]
+        elif has_run_id and has_step:
+            dedupe_subset = ["run_id", "_step"]
+        elif has_run_id and has_timestamp and has_metrics_hash:
+            dedupe_subset = ["run_id", "_timestamp", "_metrics_hash"]
+        else:
+            return history_df.reset_index(drop=True)
+
+        deduped = history_df.drop_duplicates(subset=dedupe_subset, keep="last").reset_index(
+            drop=True
+        )
+        if "_metrics_hash" in deduped.columns:
+            deduped = deduped.drop(columns=["_metrics_hash"])
+        return deduped
+
+    def finalize_outputs(
+        self,
+        *,
+        write_outputs_fn: Callable[
+            [list[dict[str, Any]], list[dict[str, Any]], str], tuple[Path, Path, Path]
+        ],
+    ) -> tuple[Path, Path, Path, int, int, bool]:
+        if not self.config.finalize_compact:
+            self.manifest.status = "completed_no_compact"
+            self.manifest.updated_at = _utc_now_iso()
+            self._save_manifest()
+            return (
+                self.runs_dir,
+                self.history_dir,
+                self.manifest_path,
+                self.manifest.total_run_rows,
+                self.manifest.total_history_rows,
+                False,
+            )
+
+        runs_df, history_df = self._load_chunk_frames()
+        deduped_runs = self._dedupe_runs(runs_df)
+        deduped_history = self._dedupe_history(history_df)
+
+        run_rows = deduped_runs.to_dict(orient="records")
+        history_rows = deduped_history.to_dict(orient="records")
+        exported_at = _utc_now_iso()
+        runs_path, history_path, manifest_path = write_outputs_fn(
+            run_rows,
+            history_rows,
+            exported_at,
+        )
+
+        self.manifest.status = "completed"
+        self.manifest.updated_at = exported_at
+        self._save_manifest()
+        return (
+            runs_path,
+            history_path,
+            manifest_path,
+            len(run_rows),
+            len(history_rows),
+            True,
+        )
 
 
 class SyncEngine:
@@ -623,6 +1003,9 @@ class SyncEngine:
 
         return runs_path, history_path, manifest_path
 
+    def _create_export_writer(self, config: ExportConfig) -> _IncrementalExportWriter:
+        return _IncrementalExportWriter(config=config, policy=self.policy)
+
     def export_project(self, config: ExportConfig) -> ExportSummary:
         started_at = time.monotonic()
         logging.info(
@@ -660,10 +1043,146 @@ class SyncEngine:
             f"{resolved_entity}/{resolved_project}", per_page=config.runs_per_page
         )
         logging.info("Starting run iteration")
-
-        run_rows: list[dict[str, Any]] = []
-        history_rows: list[dict[str, Any]] = []
         processed_runs = 0
+        resolved_config = config.model_copy(
+            update={"entity": resolved_entity, "project": resolved_project}
+        )
+
+        if not resolved_config.incremental:
+            run_rows: list[dict[str, Any]] = []
+            history_rows: list[dict[str, Any]] = []
+
+            for run in runs_obj:
+                processed_runs += 1
+                cursor = state.runs.get(run.id)
+                ctx = SyncContext(
+                    entity=resolved_entity,
+                    project=resolved_project,
+                    run_id=run.id,
+                    run_name=run.name,
+                    run_state=getattr(run, "state", None),
+                    run_updated_at=self._coerce_run_updated_at(run),
+                    run=run,
+                    cursor=cursor,
+                )
+
+                decision, _patch, history_tail = self._evaluate_run(
+                    ctx,
+                    include_history_when_unspecified=True,
+                )
+                self._update_cursor(state, ctx, decision, history_tail)
+                updated_cursor = state.runs[ctx.run_id]
+                run_rows.append(
+                    _serialize_run_row(
+                        run,
+                        entity=resolved_entity,
+                        project=resolved_project,
+                        decision=decision,
+                        cursor=updated_cursor,
+                    )
+                )
+                history_rows.extend(
+                    _serialize_history_row(ctx.run_id, entry) for entry in history_tail
+                )
+
+                if processed_runs % resolved_config.save_every == 0:
+                    state.last_synced_at = _utc_now_iso()
+                    save_state(state, resolved_state_path)
+                    logging.info(
+                        "Export progress: runs=%s history_rows=%s (state saved)",
+                        processed_runs,
+                        len(history_rows),
+                    )
+
+            exported_at = _utc_now_iso()
+            state.last_synced_at = exported_at
+            save_state(state, resolved_state_path)
+
+            runs_path, history_path, manifest_path = self._write_export_outputs(
+                config=resolved_config,
+                run_rows=run_rows,
+                history_rows=history_rows,
+                exported_at=exported_at,
+            )
+            elapsed_seconds = time.monotonic() - started_at
+            logging.info(
+                "Export complete: runs=%s history_rows=%s elapsed=%.2fs runs_file=%s history_file=%s",
+                len(run_rows),
+                len(history_rows),
+                elapsed_seconds,
+                runs_path,
+                history_path,
+            )
+            return ExportSummary(
+                entity=resolved_entity,
+                project=resolved_project,
+                state_path=str(resolved_state_path),
+                output_format=resolved_config.output_format,
+                runs_output_path=str(runs_path),
+                history_output_path=str(history_path),
+                manifest_output_path=str(manifest_path),
+                run_count=len(run_rows),
+                history_count=len(history_rows),
+                exported_at=exported_at,
+                checkpoint_count=0,
+                checkpoint_manifest_path="",
+                finalized=True,
+                partial_run_count=len(run_rows),
+                partial_history_count=len(history_rows),
+            )
+
+        writer = self._create_export_writer(resolved_config)
+        checkpoint_manifest = writer.begin_export()
+        logging.info(
+            "Checkpoint export initialized at %s (existing_checkpoints=%s, total_run_rows=%s, total_history_rows=%s)",
+            writer.manifest_path,
+            len(checkpoint_manifest.checkpoints),
+            checkpoint_manifest.total_run_rows,
+            checkpoint_manifest.total_history_rows,
+        )
+
+        run_rows_batch: list[dict[str, Any]] = []
+        history_rows_batch: list[dict[str, Any]] = []
+        checkpoint_started_at = time.monotonic()
+
+        def flush_checkpoint() -> None:
+            nonlocal run_rows_batch, history_rows_batch, checkpoint_started_at, checkpoint_manifest
+            if not run_rows_batch and not history_rows_batch:
+                return
+
+            batch_runs = len(run_rows_batch)
+            run_start_index = processed_runs - batch_runs + 1
+            run_end_index = processed_runs
+            record = writer.write_checkpoint(
+                run_rows_batch=run_rows_batch,
+                history_rows_batch=history_rows_batch,
+                run_start_index=run_start_index,
+                run_end_index=run_end_index,
+                state_hash=_state_hash(state),
+            )
+            total_elapsed = time.monotonic() - started_at
+            checkpoint_elapsed = time.monotonic() - checkpoint_started_at
+            checkpoint_manifest = writer.commit_checkpoint(
+                record,
+                processed_runs=processed_runs,
+                elapsed_seconds=total_elapsed,
+                checkpoint_elapsed_seconds=checkpoint_elapsed,
+            )
+
+            logging.info(
+                "Checkpoint %s committed: run_rows=%s history_rows=%s total_run_rows=%s total_history_rows=%s",
+                record.checkpoint_id,
+                record.run_rows,
+                record.history_rows,
+                checkpoint_manifest.total_run_rows,
+                checkpoint_manifest.total_history_rows,
+            )
+
+            state.last_synced_at = _utc_now_iso()
+            save_state(state, resolved_state_path)
+            run_rows_batch = []
+            history_rows_batch = []
+            checkpoint_started_at = time.monotonic()
 
         for run in runs_obj:
             processed_runs += 1
@@ -685,7 +1204,7 @@ class SyncEngine:
             )
             self._update_cursor(state, ctx, decision, history_tail)
             updated_cursor = state.runs[ctx.run_id]
-            run_rows.append(
+            run_rows_batch.append(
                 _serialize_run_row(
                     run,
                     entity=resolved_entity,
@@ -694,36 +1213,43 @@ class SyncEngine:
                     cursor=updated_cursor,
                 )
             )
-            history_rows.extend(
+            history_rows_batch.extend(
                 _serialize_history_row(ctx.run_id, entry) for entry in history_tail
             )
 
-            if processed_runs % config.save_every == 0:
-                state.last_synced_at = datetime.now(timezone.utc).isoformat()
-                save_state(state, resolved_state_path)
+            if processed_runs % resolved_config.checkpoint_every_runs == 0:
+                flush_checkpoint()
+            elif processed_runs % resolved_config.save_every == 0:
                 logging.info(
-                    "Export progress: runs=%s history_rows=%s (state saved)",
+                    "Export progress: runs=%s buffered_run_rows=%s buffered_history_rows=%s",
                     processed_runs,
-                    len(history_rows),
+                    len(run_rows_batch),
+                    len(history_rows_batch),
                 )
 
-        exported_at = datetime.now(timezone.utc).isoformat()
-        state.last_synced_at = exported_at
+        flush_checkpoint()
+        state.last_synced_at = _utc_now_iso()
         save_state(state, resolved_state_path)
 
-        runs_path, history_path, manifest_path = self._write_export_outputs(
-            config=config.model_copy(
-                update={"entity": resolved_entity, "project": resolved_project}
-            ),
-            run_rows=run_rows,
-            history_rows=history_rows,
-            exported_at=exported_at,
+        runs_path, history_path, manifest_path, run_count, history_count, finalized = (
+            writer.finalize_outputs(
+                write_outputs_fn=lambda run_rows, history_rows, exported_at: self._write_export_outputs(
+                    config=resolved_config,
+                    run_rows=run_rows,
+                    history_rows=history_rows,
+                    exported_at=exported_at,
+                )
+            )
         )
+        checkpoint_manifest = writer.manifest
+        exported_at = _utc_now_iso()
         elapsed_seconds = time.monotonic() - started_at
         logging.info(
-            "Export complete: runs=%s history_rows=%s elapsed=%.2fs runs_file=%s history_file=%s",
-            len(run_rows),
-            len(history_rows),
+            "Export complete: runs=%s history_rows=%s checkpoints=%s finalized=%s elapsed=%.2fs runs_path=%s history_path=%s",
+            run_count,
+            history_count,
+            len(checkpoint_manifest.checkpoints),
+            finalized,
             elapsed_seconds,
             runs_path,
             history_path,
@@ -733,11 +1259,16 @@ class SyncEngine:
             entity=resolved_entity,
             project=resolved_project,
             state_path=str(resolved_state_path),
-            output_format=config.output_format,
+            output_format=resolved_config.output_format,
             runs_output_path=str(runs_path),
             history_output_path=str(history_path),
             manifest_output_path=str(manifest_path),
-            run_count=len(run_rows),
-            history_count=len(history_rows),
+            run_count=run_count,
+            history_count=history_count,
             exported_at=exported_at,
+            checkpoint_count=len(checkpoint_manifest.checkpoints),
+            checkpoint_manifest_path=str(writer.manifest_path),
+            finalized=finalized,
+            partial_run_count=checkpoint_manifest.total_run_rows,
+            partial_history_count=checkpoint_manifest.total_history_rows,
         )
