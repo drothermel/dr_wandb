@@ -111,6 +111,44 @@ class SyncSummary(BaseModel):
     run_evaluations: list[RunEvaluation] = Field(default_factory=list)
 
 
+class RunSelectionSummary(BaseModel):
+    fetch_mode: FetchMode
+    tracked_runs: int
+    terminal_runs: int
+    ignore_runs: int
+    non_terminal_runs: int
+    selected_runs: int
+    selected_new_runs: int
+    selected_active_runs: int
+    skipped_tracked_runs: int
+
+
+class StateInspectionRun(BaseModel):
+    run_id: str
+    updated_at: str | None = None
+    last_step: int | None = None
+    history_seen: int = 0
+    terminal: bool = False
+    decision_status: str | None = None
+    decision_reason: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class StateInspectionSummary(BaseModel):
+    entity: str
+    project: str
+    state_path: str
+    tracked_runs: int
+    terminal_count: int
+    ignore_count: int
+    non_terminal_count: int
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    max_created_at: str | None = None
+    last_synced_at: str | None = None
+    selected_view: Literal["terminal", "ignore", "non_terminal"] | None = None
+    runs: list[StateInspectionRun] = Field(default_factory=list)
+
+
 class ExportConfig(BaseModel):
     entity: str
     project: str

@@ -36,6 +36,7 @@ Repository = "https://github.com/drothermel/dr_wandb"
 wandb-export = "dr_wandb.cli.export:export_main"
 wandb-bootstrap-export = "dr_wandb.cli.export:bootstrap_export_main"
 wandb-sync = "dr_wandb.cli.sync:sync_main"
+wandb-inspect-state = "dr_wandb.cli.sync:inspect_state_main"
 wandb-plan-patches = "dr_wandb.cli.sync:plan_patches_main"
 wandb-apply-patches = "dr_wandb.cli.sync:apply_patches_main"
 

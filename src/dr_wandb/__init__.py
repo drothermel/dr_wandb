@@ -18,6 +18,8 @@ __all__ = [
     "RunCursor",
     "RunDecision",
     "RunEvaluation",
+    "StateInspectionRun",
+    "StateInspectionSummary",
     "SyncContext",
     "SyncEngine",
     "SyncPolicy",
@@ -41,6 +43,8 @@ _ATTR_TO_MODULE = {
     "RunCursor": "dr_wandb.sync_types",
     "RunDecision": "dr_wandb.sync_types",
     "RunEvaluation": "dr_wandb.sync_types",
+    "StateInspectionRun": "dr_wandb.sync_types",
+    "StateInspectionSummary": "dr_wandb.sync_types",
     "SyncContext": "dr_wandb.sync_types",
     "SyncSummary": "dr_wandb.sync_types",
 }

@@ -480,6 +480,67 @@ def test_export_project_logs_first_run_before_checkpoint_boundary(
     assert "Export progress: processed_runs=1/2 (50.0%) buffered_run_rows=1 buffered_history_rows=1" in caplog.text
 
 
+def test_export_project_logs_incremental_selection_summary(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    old_created_at = datetime(2026, 3, 1, tzinfo=UTC)
+    new_created_at = datetime(2026, 3, 2, tzinfo=UTC)
+    runs = [
+        FakeRun("sealed", "sealed-run", history=[{"_step": 10}], created_at=old_created_at),
+        FakeRun("ignore", "ignore-run", history=[{"_step": 5}], created_at=old_created_at),
+        FakeRun("active", "active-run", history=[{"_step": 7}], created_at=old_created_at),
+        FakeRun("new", "new-run", history=[{"_step": 1}], created_at=new_created_at),
+    ]
+    api = FakeApi(runs)
+    engine, state_path = _engine_with_api(
+        NoopPolicy(),
+        tmp_path / "state.json",
+        api_factory=lambda: api,
+    )
+    state = ProjectSyncState(
+        entity="entity",
+        project="project",
+        max_created_at=old_created_at.isoformat(),
+        runs={
+            "sealed": RunCursor(
+                run_id="sealed",
+                last_step=10,
+                terminal=True,
+                decision_status="finished",
+            ),
+            "ignore": RunCursor(
+                run_id="ignore",
+                last_step=5,
+                terminal=True,
+                decision_status="ignore",
+            ),
+            "active": RunCursor(
+                run_id="active",
+                last_step=7,
+                terminal=False,
+                decision_status="unfinished",
+            ),
+        },
+    )
+    state_path.write_text(state.model_dump_json(indent=2), encoding="utf-8")
+    cfg = ExportConfig(
+        entity="entity",
+        project="project",
+        output_dir=tmp_path / "out-incremental-selection-log",
+        output_format="jsonl",
+        state_path=state_path,
+    )
+
+    caplog.set_level("INFO")
+    engine.export_project(cfg)
+
+    assert (
+        "Incremental selection summary: tracked_runs=3 non_terminal_runs=1 "
+        "terminal_runs=1 ignore_runs=1 selected_active_runs=1 "
+        "selected_new_runs=1 skipped_tracked_runs=2"
+    ) in caplog.text
+
+
 def test_sync_project_incremental_fetches_only_new_and_active_runs(tmp_path: Path):
     old_created_at = datetime(2026, 3, 1, tzinfo=UTC)
     new_created_at = datetime(2026, 3, 2, tzinfo=UTC)
@@ -529,6 +590,60 @@ def test_sync_project_incremental_metadata_only_policy_skips_history_scan(tmp_pa
     state = ProjectSyncState.model_validate_json(state_path.read_text(encoding="utf-8"))
     assert state.runs["r1"].terminal is True
     assert state.runs["r1"].last_step == 10
+
+
+def test_inspect_state_summarizes_terminal_ignore_and_non_terminal(tmp_path: Path):
+    state_path = tmp_path / "state.json"
+    state = ProjectSyncState(
+        entity="entity",
+        project="project",
+        max_created_at="2026-03-02T00:00:00+00:00",
+        last_synced_at="2026-03-03T00:00:00+00:00",
+        runs={
+            "terminal": RunCursor(
+                run_id="terminal",
+                terminal=True,
+                decision_status="finished",
+                decision_reason="done",
+                last_step=10,
+                history_seen=11,
+            ),
+            "ignore": RunCursor(
+                run_id="ignore",
+                terminal=True,
+                decision_status="ignore",
+                decision_reason="ignored",
+                last_step=5,
+                history_seen=6,
+            ),
+            "active": RunCursor(
+                run_id="active",
+                terminal=False,
+                decision_status="unfinished",
+                decision_reason="active",
+                last_step=3,
+                history_seen=4,
+            ),
+        },
+    )
+    state_path.write_text(state.model_dump_json(indent=2), encoding="utf-8")
+    engine = SyncEngine()
+
+    summary = engine.inspect_state(
+        "entity",
+        "project",
+        state_path=state_path,
+        show_runs="non_terminal",
+        limit=10,
+    )
+
+    assert summary.tracked_runs == 3
+    assert summary.terminal_count == 1
+    assert summary.ignore_count == 1
+    assert summary.non_terminal_count == 1
+    assert summary.status_counts == {"finished": 1, "ignore": 1, "unfinished": 1}
+    assert summary.selected_view == "non_terminal"
+    assert [run.run_id for run in summary.runs] == ["active"]
 
 
 def test_sync_project_resolves_project_case_and_punctuation(tmp_path: Path):

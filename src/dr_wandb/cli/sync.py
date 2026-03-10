@@ -100,6 +100,42 @@ def plan_patches_main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def inspect_state_main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="wandb-inspect-state")
+    parser.add_argument("entity")
+    parser.add_argument("project")
+    parser.add_argument("--state-path")
+    parser.add_argument(
+        "--show-runs",
+        choices=["non_terminal", "ignore", "terminal"],
+    )
+    parser.add_argument("--limit", type=int, default=20)
+    parser.add_argument("--output-json")
+    parser.add_argument("--log-level", default="INFO")
+    args = parser.parse_args(argv)
+
+    _setup_logging(args.log_level)
+    engine = SyncEngine()
+    summary = engine.inspect_state(
+        entity=args.entity,
+        project=args.project,
+        state_path=Path(args.state_path) if args.state_path else None,
+        show_runs=args.show_runs,
+        limit=args.limit,
+    )
+
+    payload = summary.model_dump(mode="python")
+    if args.output_json:
+        output_path = Path(args.output_json)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        logging.info("Saved state inspection summary to %s", output_path)
+    else:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+
+    return 0
+
+
 def apply_patches_main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="wandb-apply-patches")
     parser.add_argument("patches_jsonl")

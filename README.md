@@ -73,6 +73,7 @@ uv run wandb-export \
 ```bash
 wandb-sync ENTITY PROJECT --policy-module my_pkg.my_policy --policy-class MyPolicy
 wandb-bootstrap-export ENTITY PROJECT ./old_export ./new_export --policy-module my_pkg.my_policy --policy-class MyPolicy
+wandb-inspect-state ENTITY PROJECT --state-path ./state.json
 wandb-plan-patches ENTITY PROJECT ./patches.jsonl --policy-module my_pkg.my_policy --policy-class MyPolicy
 wandb-apply-patches ./patches.jsonl            # dry-run
 wandb-apply-patches ./patches.jsonl --apply    # writes updates
@@ -81,6 +82,8 @@ wandb-apply-patches ./patches.jsonl --apply    # writes updates
 `wandb-sync` and `wandb-plan-patches` also default to `--fetch-mode incremental`. Pass `--fetch-mode full_reconcile` when you need a full project rescan.
 
 `wandb-bootstrap-export` reads an existing compact export (`*_runs.*`, `*_history.*`), rebuilds sync state locally, reapplies the active policy, and seeds a fresh output directory with a single merged checkpoint baseline. It now streams large history tables instead of materializing the whole history export in memory. Use `--overwrite-output` when you want to replace an existing bootstrap target directory or state file.
+
+`wandb-inspect-state` reads the saved sync state and reports tracked run counts by status, including terminal, ignore, and non-terminal runs. Use `--show-runs non_terminal|ignore|terminal --limit N` when you want a small sample of the matching runs.
 
 ## Library usage
 

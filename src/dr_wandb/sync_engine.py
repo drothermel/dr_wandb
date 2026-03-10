@@ -39,6 +39,9 @@ from dr_wandb.sync_types import (
     RunCursor,
     RunDecision,
     RunEvaluation,
+    RunSelectionSummary,
+    StateInspectionRun,
+    StateInspectionSummary,
     SyncContext,
     SyncSummary,
 )
@@ -941,6 +944,47 @@ class SyncEngine:
 
         return selected_runs
 
+    def _summarize_selected_runs(
+        self,
+        *,
+        state: ProjectSyncState,
+        runs_obj: list[Any],
+        fetch_mode: FetchMode,
+    ) -> RunSelectionSummary:
+        ignore_runs = 0
+        terminal_runs = 0
+        non_terminal_runs = 0
+        for cursor in state.runs.values():
+            if cursor.decision_status == "ignore":
+                ignore_runs += 1
+            elif cursor.terminal:
+                terminal_runs += 1
+            else:
+                non_terminal_runs += 1
+
+        selected_new_runs = 0
+        selected_active_runs = 0
+        for run in runs_obj:
+            if getattr(run, "id", "") in state.runs:
+                selected_active_runs += 1
+            else:
+                selected_new_runs += 1
+
+        return RunSelectionSummary(
+            fetch_mode=fetch_mode,
+            tracked_runs=len(state.runs),
+            terminal_runs=terminal_runs,
+            ignore_runs=ignore_runs,
+            non_terminal_runs=non_terminal_runs,
+            selected_runs=len(runs_obj),
+            selected_new_runs=selected_new_runs,
+            selected_active_runs=selected_active_runs,
+            skipped_tracked_runs=max(
+                len(state.runs) - selected_active_runs,
+                0,
+            ),
+        )
+
     def _scan_history(
         self,
         ctx: SyncContext,
@@ -1257,6 +1301,75 @@ class SyncEngine:
             results.append(result)
 
         return results
+
+    def inspect_state(
+        self,
+        entity: str,
+        project: str,
+        *,
+        state_path: Path | None = None,
+        show_runs: str | None = None,
+        limit: int = 20,
+    ) -> StateInspectionSummary:
+        resolved_state_path = state_path or default_state_path(entity, project)
+        state = load_state(resolved_state_path, entity=entity, project=project)
+
+        status_counts: dict[str, int] = {}
+        terminal_count = 0
+        ignore_count = 0
+        non_terminal_count = 0
+
+        for cursor in state.runs.values():
+            status = cursor.decision_status or "unknown"
+            status_counts[status] = status_counts.get(status, 0) + 1
+            if status == "ignore":
+                ignore_count += 1
+            elif cursor.terminal:
+                terminal_count += 1
+            else:
+                non_terminal_count += 1
+
+        selected_runs: list[StateInspectionRun] = []
+        if show_runs is not None:
+            def matches_view(cursor: RunCursor) -> bool:
+                if show_runs == "ignore":
+                    return cursor.decision_status == "ignore"
+                if show_runs == "terminal":
+                    return cursor.terminal and cursor.decision_status != "ignore"
+                return not cursor.terminal
+
+            for run_id, cursor in sorted(state.runs.items()):
+                if not matches_view(cursor):
+                    continue
+                selected_runs.append(
+                    StateInspectionRun(
+                        run_id=run_id,
+                        updated_at=cursor.updated_at,
+                        last_step=cursor.last_step,
+                        history_seen=cursor.history_seen,
+                        terminal=cursor.terminal,
+                        decision_status=cursor.decision_status,
+                        decision_reason=cursor.decision_reason,
+                        metadata=cursor.metadata,
+                    )
+                )
+                if len(selected_runs) >= limit:
+                    break
+
+        return StateInspectionSummary(
+            entity=state.entity or entity,
+            project=state.project or project,
+            state_path=str(resolved_state_path),
+            tracked_runs=len(state.runs),
+            terminal_count=terminal_count,
+            ignore_count=ignore_count,
+            non_terminal_count=non_terminal_count,
+            status_counts=dict(sorted(status_counts.items())),
+            max_created_at=state.max_created_at,
+            last_synced_at=state.last_synced_at,
+            selected_view=cast(Any, show_runs),
+            runs=selected_runs,
+        )
 
     def _write_export_outputs(
         self,
@@ -1987,7 +2100,25 @@ class SyncEngine:
             runs_per_page=config.runs_per_page,
             fetch_mode=config.fetch_mode,
         )
+        selection_summary = self._summarize_selected_runs(
+            state=state,
+            runs_obj=runs_obj,
+            fetch_mode=config.fetch_mode,
+        )
         total_runs = len(runs_obj)
+        if config.fetch_mode == FetchMode.INCREMENTAL:
+            logging.info(
+                "Incremental selection summary: tracked_runs=%s non_terminal_runs=%s "
+                "terminal_runs=%s ignore_runs=%s selected_active_runs=%s "
+                "selected_new_runs=%s skipped_tracked_runs=%s",
+                selection_summary.tracked_runs,
+                selection_summary.non_terminal_runs,
+                selection_summary.terminal_runs,
+                selection_summary.ignore_runs,
+                selection_summary.selected_active_runs,
+                selection_summary.selected_new_runs,
+                selection_summary.skipped_tracked_runs,
+            )
         logging.info("Starting run iteration (selected_runs=%s)", total_runs)
         processed_runs = 0
         resolved_config = config.model_copy(
