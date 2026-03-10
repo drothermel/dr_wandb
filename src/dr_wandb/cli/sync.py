@@ -11,6 +11,7 @@ from dr_wandb.sync_engine import (
     read_patch_jsonl,
     write_patch_jsonl,
 )
+from dr_wandb.sync_types import FetchMode
 
 
 def _setup_logging(level: str = "INFO") -> None:
@@ -25,6 +26,11 @@ def sync_main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="wandb-sync")
     parser.add_argument("entity")
     parser.add_argument("project")
+    parser.add_argument(
+        "--fetch-mode",
+        choices=[mode.value for mode in FetchMode],
+        default=FetchMode.INCREMENTAL.value,
+    )
     parser.add_argument("--runs-per-page", type=int, default=500)
     parser.add_argument("--state-path")
     parser.add_argument("--policy-module", default="dr_wandb.sync_policy")
@@ -40,6 +46,7 @@ def sync_main(argv: list[str] | None = None) -> int:
     summary = engine.sync_project(
         entity=args.entity,
         project=args.project,
+        fetch_mode=FetchMode(args.fetch_mode),
         state_path=Path(args.state_path) if args.state_path else None,
         runs_per_page=args.runs_per_page,
     )
@@ -61,6 +68,11 @@ def plan_patches_main(argv: list[str] | None = None) -> int:
     parser.add_argument("entity")
     parser.add_argument("project")
     parser.add_argument("output_jsonl")
+    parser.add_argument(
+        "--fetch-mode",
+        choices=[mode.value for mode in FetchMode],
+        default=FetchMode.INCREMENTAL.value,
+    )
     parser.add_argument("--runs-per-page", type=int, default=500)
     parser.add_argument("--state-path")
     parser.add_argument("--policy-module", default="dr_wandb.sync_policy")
@@ -75,6 +87,7 @@ def plan_patches_main(argv: list[str] | None = None) -> int:
     plans = engine.plan_patches(
         entity=args.entity,
         project=args.project,
+        fetch_mode=FetchMode(args.fetch_mode),
         state_path=Path(args.state_path) if args.state_path else None,
         runs_per_page=args.runs_per_page,
     )

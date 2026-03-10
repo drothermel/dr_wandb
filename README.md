@@ -29,6 +29,8 @@ wandb-export ENTITY PROJECT OUTPUT_DIR [OPTIONS]
 
 Options:
   --output-format  [parquet|jsonl]  Output format (default: parquet)
+  --fetch-mode     [incremental|full_reconcile]
+                                      Run selection mode (default: incremental)
   --runs-per-page  INTEGER          Runs fetched per API call (default: 500)
   --state-path     TEXT             Optional explicit sync state path
   --save-every     INTEGER          Persist state every N runs (default: 25)
@@ -49,14 +51,36 @@ Options:
 
 The job can resume after interruption using the same `--state-path`, and final compact outputs are deduplicated from checkpoint chunks.
 
+`--fetch-mode incremental` is now the default for `wandb-export`, `wandb-sync`, and `wandb-plan-patches`. In that mode `dr_wandb`:
+- fetches newly created runs with a `createdAt >= last_seen_created_at` filter;
+- revisits only runs that are still marked non-terminal in the saved state;
+- avoids history scans unless the active policy explicitly requests them.
+
+Use `--fetch-mode full_reconcile` to force a full project rescan.
+
+To iteratively update the existing `ml-moe/moe` export on this machine, rerun:
+
+```bash
+uv run wandb-export \
+  ml-moe moe \
+  /Users/daniellerothermel/drotherm/repos/ml-moe/data/wandb_export \
+  --state-path /Users/daniellerothermel/drotherm/repos/ml-moe/data/.sync/ml_moe_moe_state.json \
+  --output-json /Users/daniellerothermel/drotherm/repos/ml-moe/data/.sync/last_export_summary.json
+```
+
 ### Sync + patch workflows
 
 ```bash
 wandb-sync ENTITY PROJECT --policy-module my_pkg.my_policy --policy-class MyPolicy
+wandb-bootstrap-export ENTITY PROJECT ./old_export ./new_export --policy-module my_pkg.my_policy --policy-class MyPolicy
 wandb-plan-patches ENTITY PROJECT ./patches.jsonl --policy-module my_pkg.my_policy --policy-class MyPolicy
 wandb-apply-patches ./patches.jsonl            # dry-run
 wandb-apply-patches ./patches.jsonl --apply    # writes updates
 ```
+
+`wandb-sync` and `wandb-plan-patches` also default to `--fetch-mode incremental`. Pass `--fetch-mode full_reconcile` when you need a full project rescan.
+
+`wandb-bootstrap-export` reads an existing compact export (`*_runs.*`, `*_history.*`), rebuilds sync state locally, reapplies the active policy, and seeds a fresh output directory with a single merged checkpoint baseline. It now streams large history tables instead of materializing the whole history export in memory. Use `--overwrite-output` when you want to replace an existing bootstrap target directory or state file.
 
 ## Library usage
 
@@ -89,6 +113,7 @@ A policy controls data retrieval and decision logic:
 - `classify_run(ctx, history_tail)`
 - `infer_patch(ctx, history_tail)`
 - `should_update(ctx, patch)`
+- `is_terminal(ctx, decision)`
 - `on_error(ctx, exc)`
 
 ### Canonical export outputs

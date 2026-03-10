@@ -27,6 +27,9 @@ class SyncPolicy(Protocol):
     def should_update(self, ctx: SyncContext, patch: PatchPlan) -> bool:
         ...
 
+    def is_terminal(self, ctx: SyncContext, decision: RunDecision) -> bool:
+        ...
+
     def on_error(self, ctx: SyncContext, exc: Exception) -> ErrorAction:
         ...
 
@@ -50,6 +53,10 @@ class NoopPolicy:
     def should_update(self, ctx: SyncContext, patch: PatchPlan) -> bool:
         _ = ctx
         return not patch.is_empty()
+
+    def is_terminal(self, ctx: SyncContext, decision: RunDecision) -> bool:
+        _ = ctx
+        return decision.status == "finished"
 
     def on_error(self, ctx: SyncContext, exc: Exception) -> ErrorAction:
         _ = ctx

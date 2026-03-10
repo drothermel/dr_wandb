@@ -5,8 +5,11 @@ from typing import Any
 
 __all__ = [
     "ErrorAction",
+    "BootstrapConfig",
+    "BootstrapSummary",
     "ExportConfig",
     "ExportSummary",
+    "FetchMode",
     "HistoryWindow",
     "NoopPolicy",
     "PatchPlan",
@@ -26,8 +29,11 @@ _ATTR_TO_MODULE = {
     "SyncPolicy": "dr_wandb.sync_policy",
     "NoopPolicy": "dr_wandb.sync_policy",
     "ErrorAction": "dr_wandb.sync_types",
+    "BootstrapConfig": "dr_wandb.sync_types",
+    "BootstrapSummary": "dr_wandb.sync_types",
     "ExportConfig": "dr_wandb.sync_types",
     "ExportSummary": "dr_wandb.sync_types",
+    "FetchMode": "dr_wandb.sync_types",
     "HistoryWindow": "dr_wandb.sync_types",
     "PatchPlan": "dr_wandb.sync_types",
     "PlannedPatch": "dr_wandb.sync_types",

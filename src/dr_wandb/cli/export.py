@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 from dr_wandb.sync_engine import SyncEngine, load_policy
-from dr_wandb.sync_types import ExportConfig
+from dr_wandb.sync_types import BootstrapConfig, ExportConfig, FetchMode
 
 
 def _setup_logging(level: str = "INFO") -> None:
@@ -23,6 +23,11 @@ def export_main(argv: list[str] | None = None) -> int:
     parser.add_argument("project")
     parser.add_argument("output_dir")
     parser.add_argument("--output-format", choices=["parquet", "jsonl"], default="parquet")
+    parser.add_argument(
+        "--fetch-mode",
+        choices=[mode.value for mode in FetchMode],
+        default=FetchMode.INCREMENTAL.value,
+    )
     parser.add_argument("--runs-per-page", type=int, default=500)
     parser.add_argument("--state-path")
     parser.add_argument("--save-every", type=int, default=25)
@@ -45,6 +50,7 @@ def export_main(argv: list[str] | None = None) -> int:
         project=args.project,
         output_dir=Path(args.output_dir),
         output_format=args.output_format,
+        fetch_mode=FetchMode(args.fetch_mode),
         runs_per_page=args.runs_per_page,
         state_path=Path(args.state_path) if args.state_path else None,
         save_every=args.save_every,
@@ -56,10 +62,11 @@ def export_main(argv: list[str] | None = None) -> int:
         policy_class=args.policy_class,
     )
     logging.info(
-        "Starting wandb export for %s/%s (format=%s, runs_per_page=%s, save_every=%s, incremental=%s, checkpoint_every_runs=%s, finalize_compact=%s)",
+        "Starting wandb export for %s/%s (format=%s, fetch_mode=%s, runs_per_page=%s, save_every=%s, incremental=%s, checkpoint_every_runs=%s, finalize_compact=%s)",
         cfg.entity,
         cfg.project,
         cfg.output_format,
+        cfg.fetch_mode,
         cfg.runs_per_page,
         cfg.save_every,
         cfg.incremental,
@@ -80,6 +87,70 @@ def export_main(argv: list[str] | None = None) -> int:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         logging.info("Saved export summary to %s", output_path)
+    else:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+
+    return 0
+
+
+def bootstrap_export_main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="wandb-bootstrap-export")
+    parser.add_argument("entity")
+    parser.add_argument("project")
+    parser.add_argument("source_dir")
+    parser.add_argument("output_dir")
+    parser.add_argument("--output-format", choices=["parquet", "jsonl"])
+    parser.add_argument("--state-path")
+    parser.add_argument("--overwrite-output", action="store_true")
+    parser.add_argument("--no-finalize-compact", action="store_true")
+    parser.add_argument("--inspection-sample-rows", type=int, default=5)
+    parser.add_argument("--policy-module", default="dr_wandb.sync_policy")
+    parser.add_argument("--policy-class", default="NoopPolicy")
+    parser.add_argument("--output-json")
+    parser.add_argument("--log-level", default="INFO")
+    args = parser.parse_args(argv)
+
+    _setup_logging(args.log_level)
+    policy = load_policy(args.policy_module, args.policy_class)
+    engine = SyncEngine(policy=policy)
+
+    cfg = BootstrapConfig(
+        entity=args.entity,
+        project=args.project,
+        source_dir=Path(args.source_dir),
+        output_dir=Path(args.output_dir),
+        output_format=args.output_format,
+        state_path=Path(args.state_path) if args.state_path else None,
+        overwrite_output=args.overwrite_output,
+        finalize_compact=not args.no_finalize_compact,
+        inspection_sample_rows=args.inspection_sample_rows,
+        policy_module=args.policy_module,
+        policy_class=args.policy_class,
+    )
+    logging.info(
+        "Starting bootstrap export for %s/%s (source_dir=%s, output_dir=%s, output_format=%s, overwrite_output=%s, finalize_compact=%s)",
+        cfg.entity,
+        cfg.project,
+        cfg.source_dir,
+        cfg.output_dir,
+        cfg.output_format,
+        cfg.overwrite_output,
+        cfg.finalize_compact,
+    )
+    logging.info(
+        "Using policy %s.%s with state path %s",
+        cfg.policy_module,
+        cfg.policy_class,
+        cfg.state_path,
+    )
+    summary = engine.bootstrap_export(cfg)
+    payload = summary.model_dump(mode="python")
+
+    if args.output_json:
+        output_path = Path(args.output_json)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        logging.info("Saved bootstrap summary to %s", output_path)
     else:
         print(json.dumps(payload, indent=2, sort_keys=True))
 

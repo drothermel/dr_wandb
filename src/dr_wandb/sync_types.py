@@ -13,6 +13,11 @@ class ErrorAction(StrEnum):
     ABORT = "abort"
 
 
+class FetchMode(StrEnum):
+    INCREMENTAL = "incremental"
+    FULL_RECONCILE = "full_reconcile"
+
+
 class HistoryWindow(BaseModel):
     min_step: int | None = None
     max_step: int | None = None
@@ -40,6 +45,7 @@ class RunCursor(BaseModel):
     updated_at: str | None = None
     last_step: int | None = None
     history_seen: int = 0
+    terminal: bool = False
     decision_status: str | None = None
     decision_reason: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -50,6 +56,7 @@ class ProjectSyncState(BaseModel):
     entity: str = ""
     project: str = ""
     last_synced_at: str | None = None
+    max_created_at: str | None = None
     runs: dict[str, RunCursor] = Field(default_factory=dict)
 
 
@@ -62,6 +69,7 @@ class SyncContext(BaseModel):
     run_name: str
     run_state: str | None
     run_updated_at: str | None
+    run_last_history_step: int | None = None
     run: Any
     cursor: RunCursor | None = None
 
@@ -108,11 +116,27 @@ class ExportConfig(BaseModel):
     project: str
     output_dir: Path
     output_format: Literal["parquet", "jsonl"] = "parquet"
+    fetch_mode: FetchMode = FetchMode.INCREMENTAL
     runs_per_page: int = 500
     state_path: Path | None = None
     save_every: int = 25
     incremental: bool = True
     checkpoint_every_runs: int = 25
+    checkpoint_dirname: str = "_checkpoints"
+    finalize_compact: bool = True
+    inspection_sample_rows: int = 5
+    policy_module: str = "dr_wandb.sync_policy"
+    policy_class: str = "NoopPolicy"
+
+
+class BootstrapConfig(BaseModel):
+    entity: str
+    project: str
+    source_dir: Path
+    output_dir: Path
+    output_format: Literal["parquet", "jsonl"] | None = None
+    state_path: Path | None = None
+    overwrite_output: bool = False
     checkpoint_dirname: str = "_checkpoints"
     finalize_compact: bool = True
     inspection_sample_rows: int = 5
@@ -176,3 +200,20 @@ class ExportSummary(BaseModel):
     finalized: bool = True
     partial_run_count: int = 0
     partial_history_count: int = 0
+
+
+class BootstrapSummary(BaseModel):
+    entity: str
+    project: str
+    source_dir: str
+    output_dir: str
+    state_path: str
+    output_format: Literal["parquet", "jsonl"]
+    runs_output_path: str
+    history_output_path: str
+    manifest_output_path: str
+    checkpoint_manifest_path: str
+    run_count: int
+    history_count: int
+    checkpoint_count: int
+    bootstrapped_at: str
