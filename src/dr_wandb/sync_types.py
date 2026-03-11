@@ -4,7 +4,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ErrorAction(StrEnum):
@@ -16,6 +16,11 @@ class ErrorAction(StrEnum):
 class FetchMode(StrEnum):
     INCREMENTAL = "incremental"
     FULL_RECONCILE = "full_reconcile"
+
+
+class RefreshScope(StrEnum):
+    UNFINISHED_ONLY = "unfinished_only"
+    UNFINISHED_OR_MISSING_EVAL = "unfinished_or_missing_eval"
 
 
 class HistoryWindow(BaseModel):
@@ -155,6 +160,7 @@ class ExportConfig(BaseModel):
     output_dir: Path
     output_format: Literal["parquet", "jsonl"] = "parquet"
     fetch_mode: FetchMode = FetchMode.INCREMENTAL
+    refresh_scope: RefreshScope = RefreshScope.UNFINISHED_ONLY
     runs_per_page: int = 500
     state_path: Path | None = None
     save_every: int = 25
@@ -165,6 +171,7 @@ class ExportConfig(BaseModel):
     inspection_sample_rows: int = 5
     policy_module: str = "dr_wandb.sync_policy"
     policy_class: str = "NoopPolicy"
+    policy_kwargs: dict[str, Any] = Field(default_factory=dict)
 
 
 class BootstrapConfig(BaseModel):
@@ -180,9 +187,11 @@ class BootstrapConfig(BaseModel):
     inspection_sample_rows: int = 5
     policy_module: str = "dr_wandb.sync_policy"
     policy_class: str = "NoopPolicy"
+    policy_kwargs: dict[str, Any] = Field(default_factory=dict)
 
 
 class CheckpointRecord(BaseModel):
+    checkpoint_type: Literal["base_partitioned", "incremental"] = "incremental"
     checkpoint_id: int
     created_at: str
     run_rows: int
@@ -197,13 +206,35 @@ class CheckpointRecord(BaseModel):
     step_min: int | None = None
     step_max: int | None = None
     runs_file: str
-    history_file: str
+    history_file: str | None = None
+    history_partition_files: list[str] = Field(default_factory=list)
+    history_partition_count: int = 0
     record_file: str
     state_hash: str
 
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_legacy_defaults(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        raw = dict(value)
+        raw.setdefault("checkpoint_type", "incremental")
+        history_file = raw.get("history_file")
+        history_partition_files = raw.get("history_partition_files")
+        if history_partition_files is None:
+            raw["history_partition_files"] = []
+        if raw["checkpoint_type"] == "base_partitioned":
+            if history_file is None and not raw["history_partition_files"]:
+                raw["history_file"] = ""
+        else:
+            if history_file is None:
+                raw["history_file"] = ""
+        raw.setdefault("history_partition_count", len(raw["history_partition_files"]))
+        return raw
+
 
 class CheckpointManifest(BaseModel):
-    schema_version: int = 1
+    schema_version: int = 2
     entity: str
     project: str
     output_format: Literal["parquet", "jsonl"] = "parquet"
@@ -220,6 +251,15 @@ class CheckpointManifest(BaseModel):
     total_history_rows: int = 0
     last_checkpoint_id: int = 0
     checkpoints: list[CheckpointRecord] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_legacy_schema_defaults(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        raw = dict(value)
+        raw.setdefault("schema_version", 2)
+        return raw
 
 
 class ExportSummary(BaseModel):

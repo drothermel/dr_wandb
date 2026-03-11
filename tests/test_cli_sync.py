@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from dr_wandb.cli.sync import inspect_state_main
+from dr_wandb.cli.sync import inspect_state_main, sync_main
 from dr_wandb.sync_types import StateInspectionSummary
 
 
@@ -79,3 +79,70 @@ def test_inspect_state_main_writes_output_json(tmp_path: Path):
     payload = json.loads(output_json.read_text(encoding="utf-8"))
     assert payload["tracked_runs"] == 3
     assert payload["ignore_count"] == 1
+
+
+def test_sync_main_profile_mode_derives_state_path(tmp_path: Path):
+    summary = Mock()
+    summary.model_dump.return_value = {
+        "entity": "entity",
+        "project": "project",
+        "state_path": str(tmp_path / ".sync" / "demo__state.json"),
+        "processed_runs": 1,
+        "planned_patches": 0,
+        "run_evaluations": [],
+    }
+
+    with patch("dr_wandb.cli.sync.load_policy") as mock_load_policy:
+        with patch("dr_wandb.cli.sync.SyncEngine") as mock_engine_cls:
+            mock_load_policy.return_value = Mock()
+            mock_engine = Mock()
+            mock_engine.sync_project.return_value = summary
+            mock_engine_cls.return_value = mock_engine
+
+            rc = sync_main(
+                [
+                    "entity",
+                    "project",
+                    "--export-name",
+                    "demo",
+                    "--data-root",
+                    str(tmp_path),
+                ]
+            )
+
+    assert rc == 0
+    kwargs = mock_engine.sync_project.call_args.kwargs
+    assert kwargs["state_path"] == tmp_path / ".sync" / "demo__state.json"
+
+
+def test_inspect_state_main_profile_mode_derives_state_path(tmp_path: Path):
+    summary = StateInspectionSummary(
+        entity="entity",
+        project="project",
+        state_path=str(tmp_path / ".sync" / "demo__state.json"),
+        tracked_runs=3,
+        terminal_count=1,
+        ignore_count=1,
+        non_terminal_count=1,
+        status_counts={"finished": 1, "ignore": 1, "unfinished": 1},
+    )
+
+    with patch("dr_wandb.cli.sync.SyncEngine") as mock_engine_cls:
+        mock_engine = Mock()
+        mock_engine.inspect_state.return_value = summary
+        mock_engine_cls.return_value = mock_engine
+
+        rc = inspect_state_main(
+            [
+                "entity",
+                "project",
+                "--export-name",
+                "demo",
+                "--data-root",
+                str(tmp_path),
+            ]
+        )
+
+    assert rc == 0
+    kwargs = mock_engine.inspect_state.call_args.kwargs
+    assert kwargs["state_path"] == tmp_path / ".sync" / "demo__state.json"
