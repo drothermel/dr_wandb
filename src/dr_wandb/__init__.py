@@ -1,7 +1,60 @@
-from .fetch import fetch_project_runs, serialize_history_entry, serialize_run
+from __future__ import annotations
+
+import importlib
+from typing import Any
 
 __all__ = [
-    "fetch_project_runs",
-    "serialize_history_entry",
-    "serialize_run",
+    "ErrorAction",
+    "BootstrapConfig",
+    "BootstrapSummary",
+    "ExportConfig",
+    "ExportSummary",
+    "FetchMode",
+    "HistoryWindow",
+    "NoopPolicy",
+    "PatchPlan",
+    "PlannedPatch",
+    "ProjectSyncState",
+    "RunCursor",
+    "RunDecision",
+    "RunEvaluation",
+    "RefreshScope",
+    "StateInspectionRun",
+    "StateInspectionSummary",
+    "SyncContext",
+    "SyncEngine",
+    "SyncPolicy",
+    "SyncSummary",
 ]
+
+_ATTR_TO_MODULE = {
+    "SyncEngine": "dr_wandb.sync_engine",
+    "SyncPolicy": "dr_wandb.sync_policy",
+    "NoopPolicy": "dr_wandb.sync_policy",
+    "ErrorAction": "dr_wandb.sync_types",
+    "BootstrapConfig": "dr_wandb.sync_types",
+    "BootstrapSummary": "dr_wandb.sync_types",
+    "ExportConfig": "dr_wandb.sync_types",
+    "ExportSummary": "dr_wandb.sync_types",
+    "FetchMode": "dr_wandb.sync_types",
+    "HistoryWindow": "dr_wandb.sync_types",
+    "PatchPlan": "dr_wandb.sync_types",
+    "PlannedPatch": "dr_wandb.sync_types",
+    "ProjectSyncState": "dr_wandb.sync_types",
+    "RefreshScope": "dr_wandb.sync_types",
+    "RunCursor": "dr_wandb.sync_types",
+    "RunDecision": "dr_wandb.sync_types",
+    "RunEvaluation": "dr_wandb.sync_types",
+    "StateInspectionRun": "dr_wandb.sync_types",
+    "StateInspectionSummary": "dr_wandb.sync_types",
+    "SyncContext": "dr_wandb.sync_types",
+    "SyncSummary": "dr_wandb.sync_types",
+}
+
+
+def __getattr__(name: str) -> Any:
+    module_name = _ATTR_TO_MODULE.get(name)
+    if module_name is None:
+        raise AttributeError(f"module 'dr_wandb' has no attribute {name!r}")
+    module = importlib.import_module(module_name)
+    return getattr(module, name)
