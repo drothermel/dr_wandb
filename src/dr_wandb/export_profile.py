@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 
 _SAFE_TOKEN = re.compile(r"[^A-Za-z0-9._-]+")
 
+RUNS_RAW_FILENAME = "runs_raw.jsonl"
+RUNS_RAW_DEDUPING_FILENAME = "runs_raw__deduping.jsonl"
+
 
 def _sanitize(value: str) -> str:
     return _SAFE_TOKEN.sub("_", value).strip("_") or "unknown"
@@ -68,8 +71,8 @@ class RawExtractProfilePaths(BaseModel):
         return cls(
             profile=profile,
             output_dir=output_dir,
-            runs_raw_path=output_dir / "runs_raw.jsonl",
-            runs_raw_deduping_path=output_dir / "runs_raw__deduping.jsonl",
+            runs_raw_path=output_dir / RUNS_RAW_FILENAME,
+            runs_raw_deduping_path=output_dir / RUNS_RAW_DEDUPING_FILENAME,
         )
 
 

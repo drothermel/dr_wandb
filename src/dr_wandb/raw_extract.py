@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sized
 import hashlib
 import json
 import logging
@@ -158,8 +159,6 @@ def build_raw_run_payload(*, run: Any, include_metadata: bool) -> dict[str, Any]
     _fill_if_missing(payload, "name", _public_attr(run, "name"))
     _fill_if_missing(payload, "state", _public_attr(run, "state"))
 
-    if not include_metadata:
-        payload.pop("metadata", None)
     payload.pop("summary", None)
     payload.pop("summary_metrics", None)
     payload.pop("system_metrics", None)
@@ -273,10 +272,9 @@ def _log_progress(*, run_count: int, total_runs: int | None, entity: str, projec
 
 
 def _maybe_total_runs(runs_iter: Any) -> int | None:
-    try:
-        total_runs = len(runs_iter)
-    except Exception:
+    if not isinstance(runs_iter, Sized):
         return None
+    total_runs = len(runs_iter)
     return total_runs if total_runs >= 0 else None
 
 
@@ -321,10 +319,9 @@ def _drop_duplicate_aliases(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _public_attr(run: Any, attr_name: str) -> Any:
-    try:
-        value = getattr(run, attr_name)
-    except Exception:
+    if not hasattr(run, attr_name):
         return None
+    value = getattr(run, attr_name)
     return _coerce_public_value(value)
 
 
@@ -338,24 +335,44 @@ def _coerce_public_value(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(k): _coerce_public_value(v) for k, v in value.items()}
     if isinstance(value, list):
-        return [_coerce_public_value(v) for v in value]
+        coerced_seq = [_coerce_public_value(v) for v in value]
+        pairs = []
+        for elem in value:
+            if not (isinstance(elem, (list, tuple)) and len(elem) == 2):
+                return coerced_seq
+            pairs.append((elem[0], elem[1]))
+        return {str(k): _coerce_public_value(v) for k, v in pairs}
     if isinstance(value, tuple):
-        return [_coerce_public_value(v) for v in value]
+        coerced_seq = [_coerce_public_value(v) for v in value]
+        pairs = []
+        for elem in value:
+            if not (isinstance(elem, (list, tuple)) and len(elem) == 2):
+                return coerced_seq
+            pairs.append((elem[0], elem[1]))
+        return {str(k): _coerce_public_value(v) for k, v in pairs}
     if isinstance(value, set):
-        return sorted(_coerce_public_value(v) for v in value)
+        coerced_sorted = sorted(_coerce_public_value(v) for v in value)
+        pairs = []
+        for elem in value:
+            if not (isinstance(elem, (list, tuple)) and len(elem) == 2):
+                return coerced_sorted
+            pairs.append((elem[0], elem[1]))
+        return {str(k): _coerce_public_value(v) for k, v in pairs}
     raw_attrs = getattr(value, "_attrs", None)
     if isinstance(raw_attrs, dict):
         return {str(k): _coerce_public_value(v) for k, v in raw_attrs.items()}
-    items = getattr(value, "items", None)
-    if callable(items):
-        try:
-            return {str(k): _coerce_public_value(v) for k, v in items()}
-        except Exception:
-            pass
-    try:
-        return dict(value)
-    except Exception:
-        return str(value)
+    if isinstance(value, Mapping) or (
+        hasattr(value, "items") and callable(getattr(value, "items", None))
+    ):
+        return {str(k): _coerce_public_value(v) for k, v in value.items()}
+    if not isinstance(value, (str, bytes, Mapping)) and hasattr(value, "__iter__"):
+        pairs = []
+        for elem in iter(value):
+            if not (isinstance(elem, (list, tuple)) and len(elem) == 2):
+                return str(value)
+            pairs.append((elem[0], elem[1]))
+        return {str(k): _coerce_public_value(v) for k, v in pairs}
+    return str(value)
 
 
 def _to_jsonable(value: Any) -> Any:

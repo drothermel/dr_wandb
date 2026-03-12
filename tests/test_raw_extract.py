@@ -4,6 +4,8 @@ import json
 import logging
 from pathlib import Path
 
+import pytest
+
 from dr_wandb.raw_extract import (
     RawExtractConfig,
     build_raw_run_payload,
@@ -255,15 +257,11 @@ def test_postprocess_dedupe_runs_raw_raises_for_malformed_non_trailing_line(tmp_
     )
     input_path.write_text(original_contents + "\n", encoding="utf-8")
 
-    try:
+    with pytest.raises(ValueError, match="Invalid JSON"):
         postprocess_dedupe_runs_raw(
             input_path=input_path,
             temp_output_path=temp_output_path,
         )
-    except ValueError as exc:
-        assert "Invalid JSON" in str(exc)
-    else:
-        raise AssertionError("Expected postprocess_dedupe_runs_raw to raise")
 
     assert input_path.read_text(encoding="utf-8") == original_contents + "\n"
 
@@ -432,12 +430,9 @@ def test_extract_runs_raw_raises_when_postprocess_fails_and_leaves_original_file
         runs_raw_deduping_path=tmp_path / "extract" / "runs_raw__deduping.jsonl",
     )
 
-    try:
+    with pytest.raises(ValueError) as excinfo:
         extract_runs_raw(config)
-    except ValueError as exc:
-        assert "Invalid JSON" in str(exc)
-    else:
-        raise AssertionError("Expected extract_runs_raw to raise")
+    assert "Invalid JSON" in str(excinfo.value)
 
     assert runs_raw_path.read_text(encoding="utf-8") == original_contents + "\n"
 

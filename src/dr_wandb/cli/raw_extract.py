@@ -38,8 +38,7 @@ def main(
         data_root=str(data_root),
         sync_root=None,
     )
-    if profile is None:
-        raise ValueError("--export-name and --data-root are required")
+    assert profile is not None, "--export-name and --data-root are required"
     raw_paths = resolve_raw_extract_profile_paths(profile)
     config = RawExtractConfig(
         entity=entity,
