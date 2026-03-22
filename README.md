@@ -107,6 +107,37 @@ summary = engine.export_project(
 print(summary.run_count, summary.history_count)
 ```
 
+### Loading extracted run metadata
+
+Use the loader functions in `dr_wandb.run_metadata` when reading `runs_raw.jsonl` exports back in. Both loaders return only the latest raw snapshot per `run_id`, ordered by `createdAt` descending.
+
+```python
+from pathlib import Path
+
+from dr_wandb.run_metadata import (
+    load_canonical_run_metadata,
+    load_raw_run_record_dicts,
+)
+
+data_root = Path("./data")
+
+canonical_runs = load_canonical_run_metadata(
+    export_name="moe_runs",
+    data_root=data_root,
+)
+
+raw_run_dicts = load_raw_run_record_dicts(
+    export_name="moe_runs",
+    data_root=data_root,
+)
+```
+
+Choose the loader based on the shape you want:
+- `load_canonical_run_metadata(...)` returns `CanonicalRunMetadata` models with promoted fields like `name`, `config`, `summaryMetrics`, and `historyKeys`.
+- `load_raw_run_record_dicts(...)` returns `RawRunRecord`-shaped dictionaries with the original outer record fields: `run_id`, `entity`, `project`, `exported_at`, `raw_run_hash`, and `raw_run`.
+
+These are the supported read paths for run metadata exports. They intentionally deduplicate multiple raw rows for the same run and should be preferred over line-by-line access to `runs_raw.jsonl`.
+
 ## Core concepts
 
 ### `SyncPolicy`

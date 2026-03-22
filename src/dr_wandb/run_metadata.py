@@ -221,7 +221,7 @@ def resolve_runs_raw_path(*, export_name: str, data_root: Path) -> Path:
     return resolve_raw_extract_profile_paths(profile).runs_raw_path
 
 
-def iter_raw_run_records(*, export_name: str, data_root: Path) -> Iterator[RawRunRecord]:
+def _iter_raw_run_records(*, export_name: str, data_root: Path) -> Iterator[RawRunRecord]:
     runs_raw_path = resolve_runs_raw_path(export_name=export_name, data_root=data_root)
     if not runs_raw_path.exists():
         raise FileNotFoundError(f"Missing raw extract file: {runs_raw_path}")
@@ -249,23 +249,45 @@ def load_canonical_run_metadata(
     export_name: str,
     data_root: Path,
 ) -> list[CanonicalRunMetadata]:
+    raw_records = _load_latest_raw_run_records(
+        export_name=export_name,
+        data_root=data_root,
+    )
+    return [
+        CanonicalRunMetadata.from_raw_run_record(record) for record in raw_records
+    ]
+
+
+def load_raw_run_record_dicts(
+    *,
+    export_name: str,
+    data_root: Path,
+) -> list[dict[str, Any]]:
+    raw_records = _load_latest_raw_run_records(
+        export_name=export_name,
+        data_root=data_root,
+    )
+    return [record.model_dump(mode="python") for record in raw_records]
+
+
+def _load_latest_raw_run_records(
+    *,
+    export_name: str,
+    data_root: Path,
+) -> list[RawRunRecord]:
     latest_by_run_id: dict[str, RawRunRecord] = {}
-    for record in iter_raw_run_records(export_name=export_name, data_root=data_root):
+    for record in _iter_raw_run_records(export_name=export_name, data_root=data_root):
         current = latest_by_run_id.get(record.run_id)
         if current is None or _record_sort_key(record) > _record_sort_key(current):
             latest_by_run_id[record.run_id] = record
 
-    canonical_runs = [
-        CanonicalRunMetadata.from_raw_run_record(record)
-        for record in latest_by_run_id.values()
-    ]
-    canonical_runs = sorted(canonical_runs, key=lambda record: record.run_id)
-    canonical_runs = sorted(
-        canonical_runs,
-        key=lambda record: record.createdAt or "",
+    raw_records = sorted(latest_by_run_id.values(), key=lambda record: record.run_id)
+    raw_records = sorted(
+        raw_records,
+        key=lambda record: _coerce_str(record.raw_run.get("createdAt")) or "",
         reverse=True,
     )
-    return canonical_runs
+    return raw_records
 
 
 def _record_sort_key(record: RawRunRecord) -> tuple[str, str]:
