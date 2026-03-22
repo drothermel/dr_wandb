@@ -12,8 +12,8 @@ from dr_wandb.run_metadata import (
     ParsedHistoryKeys,
     ParsedSummaryMetrics,
     UnparsedHistoryField,
-    iter_raw_run_records,
     load_canonical_run_metadata,
+    load_raw_run_record_dicts,
     resolve_runs_raw_path,
 )
 
@@ -283,10 +283,89 @@ def test_load_canonical_run_metadata_uses_hash_as_tie_breaker(tmp_path: Path):
     assert records[0].name == "newer"
 
 
-def test_iter_raw_run_records_raises_clear_error_on_bad_json(tmp_path: Path):
+def test_load_raw_run_record_dicts_keeps_latest_record_per_run_id(tmp_path: Path):
+    runs_raw_path = tmp_path / "wandb_export" / "wandb_raw_extract" / "runs_raw.jsonl"
+    _write_raw_records(
+        runs_raw_path,
+        [
+            {
+                "run_id": "run-1",
+                "entity": "entity",
+                "project": "project",
+                "exported_at": "2026-03-11T10:00:00+00:00",
+                "raw_run_hash": "hash-a",
+                "raw_run": {
+                    "name": "older",
+                    "createdAt": "2026-03-09T10:00:00+00:00",
+                },
+            },
+            {
+                "run_id": "run-1",
+                "entity": "entity",
+                "project": "project",
+                "exported_at": "2026-03-11T11:00:00+00:00",
+                "raw_run_hash": "hash-b",
+                "raw_run": {
+                    "displayName": "newer",
+                    "createdAt": "2026-03-09T10:00:00+00:00",
+                },
+            },
+            {
+                "run_id": "run-2",
+                "entity": "entity",
+                "project": "project",
+                "exported_at": "2026-03-11T09:00:00+00:00",
+                "raw_run_hash": "hash-c",
+                "raw_run": {
+                    "name": "second",
+                    "createdAt": "2026-03-10T10:00:00+00:00",
+                },
+            },
+        ],
+    )
+
+    records = load_raw_run_record_dicts(export_name="wandb_export", data_root=tmp_path)
+
+    assert [record["run_id"] for record in records] == ["run-2", "run-1"]
+    assert records[1]["raw_run"]["displayName"] == "newer"
+    assert records[1]["raw_run_hash"] == "hash-b"
+
+
+def test_load_raw_run_record_dicts_uses_hash_as_tie_breaker(tmp_path: Path):
+    runs_raw_path = tmp_path / "wandb_export" / "wandb_raw_extract" / "runs_raw.jsonl"
+    _write_raw_records(
+        runs_raw_path,
+        [
+            {
+                "run_id": "run-1",
+                "entity": "entity",
+                "project": "project",
+                "exported_at": "2026-03-11T10:00:00+00:00",
+                "raw_run_hash": "aaa",
+                "raw_run": {"name": "older"},
+            },
+            {
+                "run_id": "run-1",
+                "entity": "entity",
+                "project": "project",
+                "exported_at": "2026-03-11T10:00:00+00:00",
+                "raw_run_hash": "bbb",
+                "raw_run": {"name": "newer"},
+            },
+        ],
+    )
+
+    records = load_raw_run_record_dicts(export_name="wandb_export", data_root=tmp_path)
+
+    assert len(records) == 1
+    assert records[0]["raw_run"]["name"] == "newer"
+    assert records[0]["raw_run_hash"] == "bbb"
+
+
+def test_load_raw_run_record_dicts_raises_clear_error_on_bad_json(tmp_path: Path):
     runs_raw_path = tmp_path / "wandb_export" / "wandb_raw_extract" / "runs_raw.jsonl"
     runs_raw_path.parent.mkdir(parents=True, exist_ok=True)
     runs_raw_path.write_text("{bad json}\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="line 1"):
-        list(iter_raw_run_records(export_name="wandb_export", data_root=tmp_path))
+        load_raw_run_record_dicts(export_name="wandb_export", data_root=tmp_path)
