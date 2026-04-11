@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import pytest
 
-from dr_wandb.export.models import ExportManifest, ExportMode, ExportState
 from dr_wandb.export.export_paths import ExportPaths
+from dr_wandb.export.export_manifest import ExportManifest
+from dr_wandb.export.export_modes import ExportMode
+from dr_wandb.export.export_state import ExportState
 
 
 def test_export_paths_from_name_and_root(tmp_path: Path) -> None:
@@ -34,6 +37,18 @@ def test_export_paths_load_and_save_state(tmp_path: Path) -> None:
 
     loaded = paths.load_state(entity="ml-moe", project="moe")
     assert loaded == state
+
+
+def test_export_paths_load_state_rejects_mismatched_identity(
+    tmp_path: Path,
+) -> None:
+    paths = ExportPaths.from_name_and_root("moe_runs", tmp_path)
+    other = ExportState(name="other_runs", entity="ml-moe", project="other")
+
+    paths.save_state(other)
+
+    with pytest.raises(ValueError, match="State identity does not match"):
+        paths.load_state(entity="ml-moe", project="moe")
 
 
 def test_export_paths_load_and_save_manifest(tmp_path: Path) -> None:

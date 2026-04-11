@@ -7,7 +7,8 @@ from dr_ds.atomic_io import dump_json_atomic
 from pydantic import BaseModel, computed_field
 import srsly
 
-from dr_wandb.export.models import ExportManifest, ExportState
+from dr_wandb.export.export_manifest import ExportManifest
+from dr_wandb.export.export_state import ExportState
 
 
 class ExportPaths(BaseModel):
@@ -19,10 +20,7 @@ class ExportPaths(BaseModel):
 
     @classmethod
     def from_name_and_root(cls, name: str, data_root: Path) -> ExportPaths:
-        return cls(
-            name=name,
-            data_root=Path(data_root),
-        )
+        return cls(name=name, data_root=Path(data_root))
 
     @computed_field
     @property
@@ -48,7 +46,18 @@ class ExportPaths(BaseModel):
     def load_state(self, *, entity: str, project: str) -> ExportState:
         if not self.state_path.exists():
             return ExportState(name=self.name, entity=entity, project=project)
-        return ExportState.model_validate(srsly.read_json(self.state_path))
+        state = ExportState.model_validate(srsly.read_json(self.state_path))
+        if (
+            state.name != self.name
+            or state.entity != entity
+            or state.project != project
+        ):
+            raise ValueError(
+                "State identity does not match requested export: "
+                f"expected ({self.name}, {entity}, {project}), "
+                f"got ({state.name}, {state.entity}, {state.project})"
+            )
+        return state
 
     def save_state(self, state: ExportState) -> None:
         dump_json_atomic(self.state_path, state.model_dump(mode="python"))
