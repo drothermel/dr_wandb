@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import wandb
+
 from dr_wandb import (
     ExportEngine,
     ExportMode,
@@ -10,13 +12,8 @@ from dr_wandb import (
     FetchMode,
     RecordStore,
 )
-from dr_wandb.export import engine as engine_module
 
 from tests.helpers import FakeApi, history_run, metadata_run
-
-
-def _stub_api_builder(runs: list[Any]) -> Any:
-    return lambda timeout_seconds: FakeApi(runs)
 
 
 def test_metadata_export_writes_named_store(
@@ -30,11 +27,7 @@ def test_metadata_export_writes_named_store(
             state="finished",
         )
     ]
-    monkeypatch.setattr(
-        engine_module,
-        "_build_default_api",
-        _stub_api_builder(runs),
-    )
+    monkeypatch.setattr(wandb, "Api", lambda **kwargs: FakeApi(runs))
     engine = ExportEngine()
     summary = engine.export(
         ExportRequest(
@@ -69,11 +62,7 @@ def test_history_export_incremental_merges_rows(
             steps=[1, 2],
         )
     ]
-    monkeypatch.setattr(
-        engine_module,
-        "_build_default_api",
-        _stub_api_builder(first_runs),
-    )
+    monkeypatch.setattr(wandb, "Api", lambda **kwargs: FakeApi(first_runs))
     engine = ExportEngine()
     engine.export(
         ExportRequest(
@@ -95,11 +84,7 @@ def test_history_export_incremental_merges_rows(
             steps=[1, 2, 3],
         )
     ]
-    monkeypatch.setattr(
-        engine_module,
-        "_build_default_api",
-        _stub_api_builder(second_runs),
-    )
+    monkeypatch.setattr(wandb, "Api", lambda **kwargs: FakeApi(second_runs))
     engine = ExportEngine()
     summary = engine.export(
         ExportRequest(

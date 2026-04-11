@@ -3,8 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import wandb
+
 from dr_wandb import ExportEngine, ExportMode, ExportRequest, RecordStore
-from dr_wandb.export import engine as engine_module
 
 from tests.helpers import FakeApi, metadata_run
 
@@ -20,11 +21,7 @@ def test_parquet_record_store_restores_wandb_run(
             state="finished",
         )
     ]
-    monkeypatch.setattr(
-        engine_module,
-        "_build_default_api",
-        lambda timeout_seconds: FakeApi(runs),
-    )
+    monkeypatch.setattr(wandb, "Api", lambda **kwargs: FakeApi(runs))
     engine = ExportEngine()
     engine.export(
         ExportRequest(

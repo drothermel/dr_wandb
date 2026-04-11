@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
-
+import wandb
 from dr_ds.serialization import utc_now_iso
 
 from dr_wandb.export.export_manifest import ExportManifest
@@ -24,30 +23,19 @@ from dr_wandb.export.run_snapshot import RunSnapshot
 from dr_wandb.export.wandb_run import WandbRun
 
 
-def _build_default_api(timeout_seconds: int) -> Any:
-    import wandb
-
-    return wandb.Api(timeout=timeout_seconds)
-
-
 class ExportEngine:
     def export(self, request: ExportRequest) -> ExportSummary:
         store = RecordStore.from_name_and_root(
             name=request.name,
             data_root=request.data_root,
         )
-        paths = store.paths
         existing = store.load_existing(request)
-        state = existing.state
+        api = wandb.Api(timeout=request.timeout_seconds)
+        raw_runs = select_runs(api=api, request=request, state=existing.state)
 
-        api = _build_default_api(request.timeout_seconds)
-        raw_runs = select_runs(api=api, request=request, state=state)
         exported_at = utc_now_iso()
-
-        snapshot_by_id = dict(existing.snapshots)
         new_history_rows = []
         wandb_runs: list[WandbRun] = []
-
         for raw_run in raw_runs:
             wandb_run = WandbRun.from_wandb_run(
                 raw_run,
@@ -59,12 +47,12 @@ class ExportEngine:
                 continue
             wandb_runs.append(wandb_run)
 
-            tracking = state.runs.get(wandb_run.run_id)
+            tracking = existing.state.runs.get(wandb_run.run_id)
             last_history_step = (
                 tracking.last_history_step if tracking is not None else None
             )
 
-            snapshot_by_id[wandb_run.run_id] = RunSnapshot(
+            existing.snapshots[wandb_run.run_id] = RunSnapshot(
                 run=wandb_run,
                 exported_at=exported_at,
             )
@@ -97,15 +85,15 @@ class ExportEngine:
                     )
                 tracking_state.last_history_step = max_step
 
-            state.runs[wandb_run.run_id] = tracking_state
+            existing.state.runs[wandb_run.run_id] = tracking_state
             if wandb_run.created_at is not None and (
-                state.max_created_at is None
-                or wandb_run.created_at > state.max_created_at
+                existing.state.max_created_at is None
+                or wandb_run.created_at > existing.state.max_created_at
             ):
-                state.max_created_at = wandb_run.created_at
+                existing.state.max_created_at = wandb_run.created_at
 
         snapshots = sorted(
-            snapshot_by_id.values(),
+            existing.snapshots.values(),
             key=lambda snapshot: snapshot.sort_key,
             reverse=True,
         )
@@ -117,8 +105,8 @@ class ExportEngine:
         else:
             history_rows = []
 
-        state.last_exported_at = exported_at
-        paths.save_state(state)
+        existing.state.last_exported_at = exported_at
+        store.paths.save_state(existing.state)
 
         runs_output_path = store.write_run_snapshots(
             output_format=request.output_format,
@@ -130,7 +118,9 @@ class ExportEngine:
                 rows=history_rows,
             )
         else:
-            history_output_path = paths.history_path(request.output_format)
+            history_output_path = store.paths.history_path(
+                request.output_format
+            )
             store.remove_history(output_format=request.output_format)
         store.remove_other_formats(output_format=request.output_format)
 
@@ -165,16 +155,16 @@ class ExportEngine:
                 raw_runs=raw_runs,
             ),
         )
-        paths.save_manifest(manifest)
+        store.paths.save_manifest(manifest)
         return ExportSummary(
             name=request.name,
             entity=request.entity,
             project=request.project,
             mode=request.mode,
             fetch_mode=request.fetch_mode,
-            output_dir=str(paths.export_dir),
-            state_path=str(paths.state_path),
-            manifest_path=str(paths.manifest_path),
+            output_dir=str(store.paths.export_dir),
+            state_path=str(store.paths.state_path),
+            manifest_path=str(store.paths.manifest_path),
             runs_path=str(runs_output_path),
             history_path=(
                 str(history_output_path)
