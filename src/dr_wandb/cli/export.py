@@ -49,7 +49,7 @@ def export_command(
             ),
         )
 
-    summary = ExportEngine().export(
+    summary = ExportEngine(
         ExportRequest(
             entity=entity,
             project=project,
@@ -62,7 +62,7 @@ def export_command(
             include_metadata=include_metadata,
             history_policy=history_policy,
         )
-    )
+    ).export()
     typer.echo(
         json.dumps(summary.model_dump(mode="python"), indent=2, sort_keys=True)
     )

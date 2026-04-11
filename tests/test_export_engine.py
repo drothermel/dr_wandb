@@ -28,8 +28,7 @@ def test_metadata_export_writes_named_store(
         )
     ]
     monkeypatch.setattr(wandb, "Api", lambda **kwargs: FakeApi(runs))
-    engine = ExportEngine()
-    summary = engine.export(
+    engine = ExportEngine(
         ExportRequest(
             entity="ml-moe",
             project="moe",
@@ -39,6 +38,7 @@ def test_metadata_export_writes_named_store(
             fetch_mode=FetchMode.FULL_RECONCILE,
         )
     )
+    summary = engine.export()
 
     assert summary.run_count == 1
     store = RecordStore.from_name_and_root("moe_runs", tmp_path)
@@ -63,8 +63,7 @@ def test_history_export_incremental_merges_rows(
         )
     ]
     monkeypatch.setattr(wandb, "Api", lambda **kwargs: FakeApi(first_runs))
-    engine = ExportEngine()
-    engine.export(
+    ExportEngine(
         ExportRequest(
             entity="ml-moe",
             project="moe",
@@ -73,7 +72,7 @@ def test_history_export_incremental_merges_rows(
             mode=ExportMode.HISTORY,
             fetch_mode=FetchMode.FULL_RECONCILE,
         )
-    )
+    ).export()
 
     second_runs = [
         history_run(
@@ -85,8 +84,7 @@ def test_history_export_incremental_merges_rows(
         )
     ]
     monkeypatch.setattr(wandb, "Api", lambda **kwargs: FakeApi(second_runs))
-    engine = ExportEngine()
-    summary = engine.export(
+    summary = ExportEngine(
         ExportRequest(
             entity="ml-moe",
             project="moe",
@@ -95,7 +93,7 @@ def test_history_export_incremental_merges_rows(
             mode=ExportMode.HISTORY,
             fetch_mode=FetchMode.INCREMENTAL,
         )
-    )
+    ).export()
 
     assert summary.history_count == 3
     store = RecordStore.from_name_and_root("moe_history", tmp_path)

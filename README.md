@@ -81,7 +81,7 @@ from pathlib import Path
 
 from dr_wandb import ExportEngine, ExportRequest, ExportMode
 
-summary = ExportEngine().export(
+summary = ExportEngine(
     ExportRequest(
         entity="ml-moe",
         project="moe",
@@ -89,7 +89,7 @@ summary = ExportEngine().export(
         data_root=Path("data"),
         mode=ExportMode.METADATA,
     )
-)
+).export()
 
 print(summary.run_count)
 ```

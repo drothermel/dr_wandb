@@ -42,43 +42,6 @@ def scan_history_for_export(
     ]
 
 
-def selected_history_keys(
-    *,
-    request: ExportRequest,
-    wandb_runs: list[WandbRun],
-    raw_runs: list[Any],
-) -> list[str] | None:
-    if request.history_policy is None or len(wandb_runs) == 0:
-        return None
-    ctx = HistoryPolicyContext.from_wandb_run(
-        wandb_run=wandb_runs[0],
-        raw_run=raw_runs[0],
-        run_last_history_step=observed_last_history_step(
-            wandb_run=wandb_runs[0], raw_run=raw_runs[0]
-        ),
-    )
-    keys = request.history_policy.select_history_keys(ctx)
-    return list(keys) if keys is not None else None
-
-
-def selected_history_window(
-    *,
-    request: ExportRequest,
-    wandb_runs: list[WandbRun],
-    raw_runs: list[Any],
-) -> HistoryWindow | None:
-    if request.history_policy is None or len(wandb_runs) == 0:
-        return None
-    ctx = HistoryPolicyContext.from_wandb_run(
-        wandb_run=wandb_runs[0],
-        raw_run=raw_runs[0],
-        run_last_history_step=observed_last_history_step(
-            wandb_run=wandb_runs[0], raw_run=raw_runs[0]
-        ),
-    )
-    return request.history_policy.select_history_window(ctx)
-
-
 def default_history_window(ctx: HistoryPolicyContext) -> HistoryWindow | None:
     if ctx.run_last_history_step is None:
         return None

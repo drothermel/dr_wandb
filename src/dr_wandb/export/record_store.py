@@ -12,16 +12,8 @@ from dr_wandb.export.export_manifest import ExportManifest
 from dr_wandb.export.export_modes import ExportMode, FetchMode
 from dr_wandb.export.export_paths import ExportPaths
 from dr_wandb.export.export_request import ExportRequest
-from dr_wandb.export.export_state import ExportState
 from dr_wandb.export.policy import HistoryRow
 from dr_wandb.export.run_snapshot import RunSnapshot
-
-
-class ExistingExportData(BaseModel):
-    state: ExportState
-    manifest: ExportManifest | None
-    snapshots: dict[str, RunSnapshot]
-    history_rows: list[HistoryRow]
 
 
 class RecordStore(BaseModel):
@@ -37,29 +29,6 @@ class RecordStore(BaseModel):
 
     def load_manifest(self) -> ExportManifest | None:
         return self.paths.load_manifest()
-
-    def load_existing(self, request: ExportRequest) -> ExistingExportData:
-        manifest = self.load_manifest()
-        if request.fetch_mode == FetchMode.FULL_RECONCILE:
-            state = ExportState(
-                name=request.name,
-                entity=request.entity,
-                project=request.project,
-            )
-        else:
-            state = self.paths.load_state(
-                entity=request.entity, project=request.project
-            )
-        return ExistingExportData(
-            state=state,
-            manifest=manifest,
-            snapshots=self.load_existing_snapshots(
-                request=request, manifest=manifest
-            ),
-            history_rows=self.load_existing_history_rows(
-                request=request, manifest=manifest
-            ),
-        )
 
     def require_manifest(self) -> ExportManifest:
         manifest = self.load_manifest()

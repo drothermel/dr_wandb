@@ -22,8 +22,7 @@ def test_record_store_restores_wandb_run(
         )
     ]
     monkeypatch.setattr(wandb, "Api", lambda **kwargs: FakeApi(runs))
-    engine = ExportEngine()
-    engine.export(
+    ExportEngine(
         ExportRequest(
             entity="ml-moe",
             project="moe",
@@ -31,7 +30,7 @@ def test_record_store_restores_wandb_run(
             data_root=tmp_path,
             mode=ExportMode.METADATA,
         )
-    )
+    ).export()
 
     store = RecordStore.from_name_and_root("moe_runs", Path(tmp_path))
     snapshots = store.load_run_snapshots()
