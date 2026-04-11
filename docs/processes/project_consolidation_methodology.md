@@ -1,1 +1,0 @@
-/Users/daniellerothermel/drotherm/repos/dr_ref/docs/processes/project_consolidation_methodology.md
