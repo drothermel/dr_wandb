@@ -11,7 +11,8 @@ from pydantic import BaseModel
 import srsly
 
 from dr_wandb.export.export_paths import ExportPaths
-from dr_wandb.export.models import ExportManifest, HistoryRow, RunSnapshot
+from dr_wandb.export.models import ExportManifest, RunSnapshot
+from dr_wandb.export.policy import HistoryRow
 
 
 class RecordStore(BaseModel):

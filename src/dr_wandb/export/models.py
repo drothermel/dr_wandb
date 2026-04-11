@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from dr_wandb.export.policy import HistoryWindow
 
 
 class ExportMode(StrEnum):
@@ -15,25 +16,6 @@ class ExportMode(StrEnum):
 class FetchMode(StrEnum):
     INCREMENTAL = "incremental"
     FULL_RECONCILE = "full_reconcile"
-
-
-class HistoryWindow(BaseModel):
-    min_step: int | None = None
-    max_step: int | None = None
-    max_records: int | None = None
-
-
-class HistoryPolicyContext(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    entity: str
-    project: str
-    run_id: str
-    run_name: str
-    run_state: str | None
-    run_updated_at: str | None
-    run_last_history_step: int | None = None
-    run: Any
 
 
 class RunTrackingState(BaseModel):
@@ -60,16 +42,6 @@ class RunSnapshot(BaseModel):
     project: str
     exported_at: str
     raw_run: dict[str, Any] = Field(default_factory=dict)
-
-
-class HistoryRow(BaseModel):
-    run_id: str
-    step: int | None = None
-    timestamp: str | None = None
-    runtime: int | float | None = None
-    wandb_metadata: dict[str, Any] = Field(default_factory=dict)
-    metrics: dict[str, Any] = Field(default_factory=dict)
-    extra: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExportManifest(BaseModel):

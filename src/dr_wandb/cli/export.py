@@ -11,9 +11,8 @@ from dr_wandb.export.models import (
     ExportMode,
     ExportRequest,
     FetchMode,
-    HistoryWindow,
 )
-from dr_wandb.export.policy import StaticHistoryPolicy
+from dr_wandb.export.policy import HistoryWindow, StaticHistoryPolicy
 
 
 def export_command(
