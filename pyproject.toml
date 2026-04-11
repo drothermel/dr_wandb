@@ -65,7 +65,7 @@ include = [
     "src/**/*.py",
     "tests/**/*.py",
 ]
-line-length = 88
+line-length = 79
 cache-dir = ".ruff_cache"
 exclude = ["outputs/*", "notebooks/*", "plots/*", "data/*", "docs/*"]
 

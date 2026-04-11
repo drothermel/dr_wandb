@@ -7,7 +7,12 @@ from typing import Literal
 import typer
 
 from dr_wandb.export.engine import ExportEngine
-from dr_wandb.export.models import ExportMode, ExportRequest, FetchMode, HistoryWindow
+from dr_wandb.export.models import (
+    ExportMode,
+    ExportRequest,
+    FetchMode,
+    HistoryWindow,
+)
 from dr_wandb.export.policy import StaticHistoryPolicy
 
 
@@ -20,7 +25,9 @@ def export_command(
     output_format: Literal["jsonl", "parquet"] = typer.Option(
         "jsonl", "--output-format"
     ),
-    fetch_mode: FetchMode = typer.Option(FetchMode.INCREMENTAL, "--fetch-mode"),
+    fetch_mode: FetchMode = typer.Option(
+        FetchMode.INCREMENTAL, "--fetch-mode"
+    ),
     runs_per_page: int = typer.Option(500, "--runs-per-page"),
     timeout_seconds: int = typer.Option(120, "--timeout-seconds"),
     include_metadata: bool = typer.Option(
@@ -68,7 +75,9 @@ def export_command(
             history_policy=history_policy,
         )
     )
-    typer.echo(json.dumps(summary.model_dump(mode="python"), indent=2, sort_keys=True))
+    typer.echo(
+        json.dumps(summary.model_dump(mode="python"), indent=2, sort_keys=True)
+    )
 
 
 def main() -> None:

@@ -7,7 +7,9 @@ from dr_wandb.cli.export import export_command
 from dr_wandb.export.models import ExportMode, ExportSummary, FetchMode
 
 
-def test_cli_export_builds_history_request(monkeypatch, capsys, tmp_path: Path) -> None:
+def test_cli_export_builds_history_request(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
     captured: dict[str, object] = {}
 
     def fake_export(self, request):
@@ -28,7 +30,9 @@ def test_cli_export_builds_history_request(monkeypatch, capsys, tmp_path: Path) 
             exported_at="2024-01-01T00:00:00+00:00",
         )
 
-    monkeypatch.setattr("dr_wandb.export.engine.ExportEngine.export", fake_export)
+    monkeypatch.setattr(
+        "dr_wandb.export.engine.ExportEngine.export", fake_export
+    )
 
     export_command(
         "ml-moe",

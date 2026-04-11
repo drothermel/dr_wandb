@@ -44,7 +44,9 @@ def history_path(paths: ExportPaths, output_format: str) -> Path:
     return paths.export_dir / f"history.{output_format}"
 
 
-def load_state(paths: ExportPaths, *, entity: str, project: str) -> ExportState:
+def load_state(
+    paths: ExportPaths, *, entity: str, project: str
+) -> ExportState:
     if not paths.state_path.exists():
         return ExportState(name=paths.name, entity=entity, project=project)
     return ExportState.model_validate(srsly.read_json(paths.state_path))
@@ -64,11 +66,15 @@ def save_manifest(paths: ExportPaths, manifest: ExportManifest) -> None:
     dump_json_atomic(paths.manifest_path, manifest.model_dump(mode="python"))
 
 
-def read_records(path: Path, *, json_columns: set[str]) -> list[dict[str, Any]]:
+def read_records(
+    path: Path, *, json_columns: set[str]
+) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     if path.suffix == ".jsonl":
-        return [cast(dict[str, Any], record) for record in srsly.read_jsonl(path)]
+        return [
+            cast(dict[str, Any], record) for record in srsly.read_jsonl(path)
+        ]
     frame = pd.read_parquet(path)
     return parquet_frame_to_records(frame, json_columns=json_columns)
 
@@ -91,7 +97,8 @@ def write_records(
         ) as handle:
             for record in records:
                 handle.write(
-                    srsly.json_dumps(to_jsonable(record), sort_keys=True) + "\n"
+                    srsly.json_dumps(to_jsonable(record), sort_keys=True)
+                    + "\n"
                 )
             handle.flush()
             os.fsync(handle.fileno())

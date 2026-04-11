@@ -55,8 +55,12 @@ class ExportEngine:
         self.api_factory = api_factory or _build_default_api
 
     def export(self, request: ExportRequest) -> ExportSummary:
-        paths = resolve_export_paths(name=request.name, data_root=request.data_root)
-        state = load_state(paths, entity=request.entity, project=request.project)
+        paths = resolve_export_paths(
+            name=request.name, data_root=request.data_root
+        )
+        state = load_state(
+            paths, entity=request.entity, project=request.project
+        )
         state.name = request.name
         state.entity = request.entity
         state.project = request.project
@@ -97,9 +101,13 @@ class ExportEngine:
                 run_id=run_id,
                 run_name=str(getattr(run, "name", "")),
                 run_state=self._run_state(run),
-                run_updated_at=serialize_timestamp(getattr(run, "updated_at", None)),
+                run_updated_at=serialize_timestamp(
+                    getattr(run, "updated_at", None)
+                ),
                 run_last_history_step=(
-                    tracking.last_history_step if tracking is not None else None
+                    tracking.last_history_step
+                    if tracking is not None
+                    else None
                 ),
                 run=run,
             )
@@ -117,11 +125,17 @@ class ExportEngine:
 
             tracking_state = RunTrackingState(
                 run_id=run_id,
-                created_at=serialize_timestamp(getattr(run, "created_at", None)),
-                updated_at=serialize_timestamp(getattr(run, "updated_at", None)),
+                created_at=serialize_timestamp(
+                    getattr(run, "created_at", None)
+                ),
+                updated_at=serialize_timestamp(
+                    getattr(run, "updated_at", None)
+                ),
                 run_state=self._run_state(run),
                 last_history_step=(
-                    tracking.last_history_step if tracking is not None else None
+                    tracking.last_history_step
+                    if tracking is not None
+                    else None
                 ),
             )
 
@@ -201,7 +215,9 @@ class ExportEngine:
             updated_at=exported_at,
             runs_path=str(runs_output_path),
             history_path=(
-                str(history_output_path) if request.mode == ExportMode.HISTORY else None
+                str(history_output_path)
+                if request.mode == ExportMode.HISTORY
+                else None
             ),
             run_count=len(snapshots),
             history_count=len(history_rows),
@@ -220,7 +236,9 @@ class ExportEngine:
             manifest_path=str(paths.manifest_path),
             runs_path=str(runs_output_path),
             history_path=(
-                str(history_output_path) if request.mode == ExportMode.HISTORY else None
+                str(history_output_path)
+                if request.mode == ExportMode.HISTORY
+                else None
             ),
             run_count=len(snapshots),
             history_count=len(history_rows),
@@ -241,7 +259,9 @@ class ExportEngine:
         )
         return {
             snapshot.run_id: snapshot
-            for snapshot in (RunSnapshot.model_validate(record) for record in records)
+            for snapshot in (
+                RunSnapshot.model_validate(record) for record in records
+            )
         }
 
     def _load_existing_history_rows(
@@ -337,9 +357,14 @@ class ExportEngine:
         )
 
     def _chunked(self, values: list[str], size: int) -> list[list[str]]:
-        return [values[index : index + size] for index in range(0, len(values), size)]
+        return [
+            values[index : index + size]
+            for index in range(0, len(values), size)
+        ]
 
-    def _should_refresh_tracking_state(self, tracking: RunTrackingState) -> bool:
+    def _should_refresh_tracking_state(
+        self, tracking: RunTrackingState
+    ) -> bool:
         return tracking.run_state not in TERMINAL_RUN_STATES
 
     def _run_state(self, run: Any) -> str | None:
@@ -367,7 +392,9 @@ class ExportEngine:
         if request.fetch_mode == FetchMode.INCREMENTAL and window is None:
             window = self._default_history_window(ctx)
         entries = self._scan_history(run=ctx.run, keys=keys, window=window)
-        return [self._build_history_row(ctx.run_id, entry) for entry in entries]
+        return [
+            self._build_history_row(ctx.run_id, entry) for entry in entries
+        ]
 
     def _selected_history_keys(
         self, *, request: ExportRequest, runs: list[Any]
@@ -381,7 +408,9 @@ class ExportEngine:
             run_id=str(getattr(first_run, "id", "")),
             run_name=str(getattr(first_run, "name", "")),
             run_state=self._run_state(first_run),
-            run_updated_at=serialize_timestamp(getattr(first_run, "updated_at", None)),
+            run_updated_at=serialize_timestamp(
+                getattr(first_run, "updated_at", None)
+            ),
             run_last_history_step=self._observed_last_history_step(first_run),
             run=first_run,
         )
@@ -400,7 +429,9 @@ class ExportEngine:
             run_id=str(getattr(first_run, "id", "")),
             run_name=str(getattr(first_run, "name", "")),
             run_state=self._run_state(first_run),
-            run_updated_at=serialize_timestamp(getattr(first_run, "updated_at", None)),
+            run_updated_at=serialize_timestamp(
+                getattr(first_run, "updated_at", None)
+            ),
             run_last_history_step=self._observed_last_history_step(first_run),
             run=first_run,
         )
@@ -450,14 +481,20 @@ class ExportEngine:
             return value
         return None
 
-    def _build_history_row(self, run_id: str, entry: dict[str, Any]) -> HistoryRow:
+    def _build_history_row(
+        self, run_id: str, entry: dict[str, Any]
+    ) -> HistoryRow:
         wandb_value = entry.get("_wandb")
         return HistoryRow(
             run_id=run_id,
-            step=entry.get("_step") if isinstance(entry.get("_step"), int) else None,
+            step=entry.get("_step")
+            if isinstance(entry.get("_step"), int)
+            else None,
             timestamp=serialize_timestamp(entry.get("_timestamp")),
             runtime=entry.get("_runtime"),
-            wandb_metadata=dict(wandb_value) if isinstance(wandb_value, dict) else {},
+            wandb_metadata=dict(wandb_value)
+            if isinstance(wandb_value, dict)
+            else {},
             metrics={
                 str(key): value
                 for key, value in entry.items()
@@ -467,7 +504,8 @@ class ExportEngine:
                 str(key): value
                 for key, value in entry.items()
                 if str(key).startswith("_")
-                and str(key) not in {"_step", "_timestamp", "_runtime", "_wandb"}
+                and str(key)
+                not in {"_step", "_timestamp", "_runtime", "_wandb"}
             },
         )
 
@@ -537,7 +575,9 @@ class ExportEngine:
         if not include_metadata:
             payload.pop("metadata", None)
         payload = self._drop_duplicate_aliases(payload)
-        self._fill_if_missing(payload, "config", self._public_attr(run, "config"))
+        self._fill_if_missing(
+            payload, "config", self._public_attr(run, "config")
+        )
         self._fill_summary(payload, run)
         self._fill_if_missing(
             payload,
@@ -551,7 +591,9 @@ class ExportEngine:
                 self._public_attr(run, "metadata"),
             )
         self._fill_if_missing(payload, "tags", self._public_attr(run, "tags"))
-        self._fill_if_missing(payload, "group", self._public_attr(run, "group"))
+        self._fill_if_missing(
+            payload, "group", self._public_attr(run, "group")
+        )
         self._fill_if_missing(
             payload,
             "historyKeys",
@@ -601,7 +643,9 @@ class ExportEngine:
             self._public_attr(run, "display_name"),
         )
         self._fill_if_missing(payload, "name", self._public_attr(run, "name"))
-        self._fill_if_missing(payload, "state", self._public_attr(run, "state"))
+        self._fill_if_missing(
+            payload, "state", self._public_attr(run, "state")
+        )
         payload.pop("summary", None)
         payload.pop("summary_metrics", None)
         payload.pop("system_metrics", None)
@@ -621,7 +665,9 @@ class ExportEngine:
             return {}
         return to_jsonable(raw_attrs)
 
-    def _drop_duplicate_aliases(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _drop_duplicate_aliases(
+        self, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         result = dict(payload)
         if "systemMetrics" in result:
             result.pop("system_metrics", None)
@@ -643,7 +689,9 @@ class ExportEngine:
             result.pop("storage_id", None)
         return result
 
-    def _fill_if_missing(self, payload: dict[str, Any], key: str, value: Any) -> None:
+    def _fill_if_missing(
+        self, payload: dict[str, Any], key: str, value: Any
+    ) -> None:
         if key in payload and payload[key] is not None:
             return
         if value is None:
@@ -683,7 +731,9 @@ class ExportEngine:
         if isinstance(value, tuple):
             return [self._coerce_public_value(nested) for nested in value]
         if isinstance(value, set):
-            return sorted(self._coerce_public_value(nested) for nested in value)
+            return sorted(
+                self._coerce_public_value(nested) for nested in value
+            )
         raw_attrs = getattr(value, "_attrs", None)
         if isinstance(raw_attrs, dict):
             return {

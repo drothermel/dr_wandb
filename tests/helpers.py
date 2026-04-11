@@ -56,13 +56,15 @@ class FakeRun:
             rows = [
                 row
                 for row in rows
-                if not isinstance(row.get("_step"), int) or row["_step"] >= min_step
+                if not isinstance(row.get("_step"), int)
+                or row["_step"] >= min_step
             ]
         if max_step is not None:
             rows = [
                 row
                 for row in rows
-                if not isinstance(row.get("_step"), int) or row["_step"] <= max_step
+                if not isinstance(row.get("_step"), int)
+                or row["_step"] <= max_step
             ]
         if keys is None:
             return rows

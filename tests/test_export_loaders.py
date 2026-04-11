@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dr_wandb import ExportEngine, ExportMode, ExportRequest, load_run_snapshot_dicts
+from dr_wandb import (
+    ExportEngine,
+    ExportMode,
+    ExportRequest,
+    load_run_snapshot_dicts,
+)
 
 from tests.helpers import FakeApi, metadata_run
 
