@@ -34,7 +34,7 @@ from dr_wandb.export.store import (
     save_state,
     write_records,
 )
-from dr_wandb.shared.serialization import serialize_timestamp, to_jsonable, utc_now_iso
+from dr_ds.serialization import serialize_timestamp, to_jsonable, utc_now_iso
 
 TERMINAL_RUN_STATES = {"finished", "failed", "crashed", "killed"}
 RUN_BATCH_SIZE = 100

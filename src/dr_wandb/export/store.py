@@ -5,16 +5,13 @@ import tempfile
 from pathlib import Path
 from typing import Any, cast
 
+from dr_ds.parquet import parquet_frame_to_records, records_to_parquet_frame
+from dr_ds.serialization import dump_json_atomic, to_jsonable
 import pandas as pd
 from pydantic import BaseModel
 import srsly
 
 from dr_wandb.export.models import ExportManifest, ExportState
-from dr_wandb.shared.parquet import (
-    parquet_frame_to_records,
-    records_to_parquet_frame,
-)
-from dr_wandb.shared.serialization import dump_json_atomic, to_jsonable
 
 RUN_SNAPSHOT_JSON_COLUMNS = {"raw_run"}
 HISTORY_ROW_JSON_COLUMNS = {"wandb_metadata", "metrics", "extra"}
