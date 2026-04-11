@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 from dr_ds.serialization import utc_now_iso
 
@@ -31,13 +31,6 @@ def _build_default_api(timeout_seconds: int) -> Any:
 
 
 class ExportEngine:
-    def __init__(
-        self,
-        *,
-        api_factory: Callable[[int], Any] | None = None,
-    ) -> None:
-        self.api_factory = api_factory or _build_default_api
-
     def export(self, request: ExportRequest) -> ExportSummary:
         store = RecordStore.from_name_and_root(
             name=request.name,
@@ -67,7 +60,7 @@ class ExportEngine:
             existing_snapshots = {}
             existing_history_rows = []
 
-        api = self.api_factory(request.timeout_seconds)
+        api = _build_default_api(request.timeout_seconds)
         runs = select_runs(api=api, request=request, state=state)
         exported_at = utc_now_iso()
 

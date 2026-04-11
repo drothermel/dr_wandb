@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from dr_wandb import ExportEngine, ExportMode, ExportRequest, RecordStore
+from dr_wandb.export import engine as engine_module
 
 from tests.helpers import FakeApi, metadata_run
 
 
-def test_parquet_record_store_restores_raw_run_dict(tmp_path: Path) -> None:
+def test_parquet_record_store_restores_raw_run_dict(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
     runs = [
         metadata_run(
             "run-1",
@@ -16,7 +20,12 @@ def test_parquet_record_store_restores_raw_run_dict(tmp_path: Path) -> None:
             state="finished",
         )
     ]
-    engine = ExportEngine(api_factory=lambda timeout: FakeApi(runs))
+    monkeypatch.setattr(
+        engine_module,
+        "_build_default_api",
+        lambda timeout_seconds: FakeApi(runs),
+    )
+    engine = ExportEngine()
     engine.export(
         ExportRequest(
             entity="ml-moe",
@@ -29,5 +38,5 @@ def test_parquet_record_store_restores_raw_run_dict(tmp_path: Path) -> None:
     )
 
     store = RecordStore.from_name_and_root("moe_runs", Path(tmp_path))
-    payloads = store.load_run_snapshot_dicts()
-    assert payloads[0]["raw_run"]["summaryMetrics"]["loss"] == 1.23
+    snapshots = store.load_run_snapshots()
+    assert snapshots[0].raw_run["summaryMetrics"]["loss"] == 1.23

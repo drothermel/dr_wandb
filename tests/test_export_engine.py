@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from dr_wandb import (
     ExportEngine,
@@ -9,11 +10,18 @@ from dr_wandb import (
     FetchMode,
     RecordStore,
 )
+from dr_wandb.export import engine as engine_module
 
 from tests.helpers import FakeApi, history_run, metadata_run
 
 
-def test_metadata_export_writes_named_store(tmp_path: Path) -> None:
+def _stub_api_builder(runs: list[Any]) -> Any:
+    return lambda timeout_seconds: FakeApi(runs)
+
+
+def test_metadata_export_writes_named_store(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
     runs = [
         metadata_run(
             "run-1",
@@ -22,7 +30,12 @@ def test_metadata_export_writes_named_store(tmp_path: Path) -> None:
             state="finished",
         )
     ]
-    engine = ExportEngine(api_factory=lambda timeout: FakeApi(runs))
+    monkeypatch.setattr(
+        engine_module,
+        "_build_default_api",
+        _stub_api_builder(runs),
+    )
+    engine = ExportEngine()
     summary = engine.export(
         ExportRequest(
             entity="ml-moe",
@@ -44,7 +57,9 @@ def test_metadata_export_writes_named_store(tmp_path: Path) -> None:
     assert snapshots[0].raw_run["config"]["lr"] == 0.001
 
 
-def test_history_export_incremental_merges_rows(tmp_path: Path) -> None:
+def test_history_export_incremental_merges_rows(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
     first_runs = [
         history_run(
             "run-1",
@@ -54,7 +69,12 @@ def test_history_export_incremental_merges_rows(tmp_path: Path) -> None:
             steps=[1, 2],
         )
     ]
-    engine = ExportEngine(api_factory=lambda timeout: FakeApi(first_runs))
+    monkeypatch.setattr(
+        engine_module,
+        "_build_default_api",
+        _stub_api_builder(first_runs),
+    )
+    engine = ExportEngine()
     engine.export(
         ExportRequest(
             entity="ml-moe",
@@ -75,7 +95,12 @@ def test_history_export_incremental_merges_rows(tmp_path: Path) -> None:
             steps=[1, 2, 3],
         )
     ]
-    engine = ExportEngine(api_factory=lambda timeout: FakeApi(second_runs))
+    monkeypatch.setattr(
+        engine_module,
+        "_build_default_api",
+        _stub_api_builder(second_runs),
+    )
+    engine = ExportEngine()
     summary = engine.export(
         ExportRequest(
             entity="ml-moe",
