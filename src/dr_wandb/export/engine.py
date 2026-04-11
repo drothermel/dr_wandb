@@ -5,9 +5,9 @@ from typing import Any
 from dr_ds.serialization import utc_now_iso
 
 from dr_wandb.export.export_manifest import ExportManifest
-from dr_wandb.export.export_modes import ExportMode, FetchMode
+from dr_wandb.export.export_modes import ExportMode
 from dr_wandb.export.export_request import ExportRequest
-from dr_wandb.export.export_state import ExportState, RunTrackingState
+from dr_wandb.export.export_state import RunTrackingState
 from dr_wandb.export.export_summary import ExportSummary
 from dr_wandb.export.history_export import (
     max_history_step,
@@ -37,33 +37,14 @@ class ExportEngine:
             data_root=request.data_root,
         )
         paths = store.paths
-        state = paths.load_state(
-            entity=request.entity, project=request.project
-        )
-        existing_manifest = store.load_manifest()
-        existing_snapshots = store.load_existing_snapshots(
-            request=request,
-            manifest=existing_manifest,
-        )
-        existing_history_rows = store.load_existing_history_rows(
-            request=request,
-            manifest=existing_manifest,
-        )
-
-        if request.fetch_mode == FetchMode.FULL_RECONCILE:
-            state = ExportState(
-                name=request.name,
-                entity=request.entity,
-                project=request.project,
-            )
-            existing_snapshots = {}
-            existing_history_rows = []
+        existing = store.load_existing(request)
+        state = existing.state
 
         api = _build_default_api(request.timeout_seconds)
         raw_runs = select_runs(api=api, request=request, state=state)
         exported_at = utc_now_iso()
 
-        snapshot_by_id = dict(existing_snapshots)
+        snapshot_by_id = dict(existing.snapshots)
         new_history_rows = []
         wandb_runs: list[WandbRun] = []
 
@@ -130,7 +111,7 @@ class ExportEngine:
         )
         if request.mode == ExportMode.HISTORY:
             history_rows = merge_history_rows(
-                existing_history_rows=existing_history_rows,
+                existing_history_rows=existing.history_rows,
                 new_history_rows=new_history_rows,
             )
         else:
@@ -160,8 +141,8 @@ class ExportEngine:
             mode=request.mode,
             output_format=request.output_format,
             created_at=(
-                existing_manifest.created_at
-                if existing_manifest is not None
+                existing.manifest.created_at
+                if existing.manifest is not None
                 else exported_at
             ),
             updated_at=exported_at,
