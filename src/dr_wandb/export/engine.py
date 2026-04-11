@@ -6,7 +6,6 @@ from dr_ds.serialization import utc_now_iso
 from dr_wandb.export.export_manifest import ExportManifest
 from dr_wandb.export.export_modes import ExportMode
 from dr_wandb.export.export_request import ExportRequest
-from dr_wandb.export.export_state import RunTrackingState
 from dr_wandb.export.export_summary import ExportSummary
 from dr_wandb.export.history_export import (
     max_history_step,
@@ -47,26 +46,18 @@ class ExportEngine:
                 continue
             wandb_runs.append(wandb_run)
 
-            tracking = existing.state.runs.get(wandb_run.run_id)
-            last_history_step = (
-                tracking.last_history_step if tracking is not None else None
-            )
-
             existing.snapshots[wandb_run.run_id] = RunSnapshot(
                 run=wandb_run,
                 exported_at=exported_at,
             )
 
-            tracking_state = RunTrackingState.from_wandb_run(
-                wandb_run,
-                last_history_step=last_history_step,
-            )
+            tracking_state = existing.state.begin_run_tracking(wandb_run)
 
             if request.mode == ExportMode.HISTORY:
                 ctx = HistoryPolicyContext.from_wandb_run(
                     wandb_run=wandb_run,
                     raw_run=raw_run,
-                    run_last_history_step=last_history_step,
+                    run_last_history_step=tracking_state.last_history_step,
                 )
                 history_rows = scan_history_for_export(
                     request=request,
@@ -84,13 +75,6 @@ class ExportEngine:
                         else max(max_step, observed_last_step)
                     )
                 tracking_state.last_history_step = max_step
-
-            existing.state.runs[wandb_run.run_id] = tracking_state
-            if wandb_run.created_at is not None and (
-                existing.state.max_created_at is None
-                or wandb_run.created_at > existing.state.max_created_at
-            ):
-                existing.state.max_created_at = wandb_run.created_at
 
         snapshots = sorted(
             existing.snapshots.values(),

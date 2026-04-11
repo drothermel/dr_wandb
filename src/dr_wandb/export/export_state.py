@@ -36,3 +36,19 @@ class ExportState(BaseModel):
     last_exported_at: str | None = None
     max_created_at: str | None = None
     runs: dict[str, RunTrackingState] = Field(default_factory=dict)
+
+    def begin_run_tracking(self, wandb_run: WandbRun) -> RunTrackingState:
+        prior = self.runs.get(wandb_run.run_id)
+        tracking_state = RunTrackingState.from_wandb_run(
+            wandb_run,
+            last_history_step=(
+                prior.last_history_step if prior is not None else None
+            ),
+        )
+        self.runs[wandb_run.run_id] = tracking_state
+        if wandb_run.created_at is not None and (
+            self.max_created_at is None
+            or wandb_run.created_at > self.max_created_at
+        ):
+            self.max_created_at = wandb_run.created_at
+        return tracking_state
