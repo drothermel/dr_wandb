@@ -79,7 +79,7 @@ wandb-export ml-moe moe \
 ```python
 from pathlib import Path
 
-from dr_wandb import ExportEngine, ExportRequest, ExportMode
+from dr_wandb import ExportEngine, ExportMode, ExportRequest
 
 summary = ExportEngine(
     ExportRequest(
@@ -96,7 +96,7 @@ print(summary.run_count)
 
 ## Loaders
 
-Use the public loaders to read an existing export back in:
+Read an existing export back in with the top-level helper functions:
 
 ```python
 from pathlib import Path
@@ -120,12 +120,15 @@ rows = list(iter_history_rows("moe_history", Path("data")))
 print(len(rows))
 ```
 
+`ExportStore` is also available if you want direct access to the per-export
+directory layout and I/O.
+
 ## Core Concepts
 
-- `metadata` mode exports current run snapshots only.
-- `history` mode exports current run snapshots plus history rows.
-- `incremental` mode fetches newly created runs and refreshes tracked non-terminal runs.
-- `full_reconcile` rebuilds the export from scratch.
+- `ExportMode.METADATA` exports current run snapshots only.
+- `ExportMode.HISTORY` exports current run snapshots plus history rows.
+- `SyncMode.INCREMENTAL` fetches newly created runs and refreshes tracked non-terminal runs.
+- `SyncMode.FULL_RECONCILE` rebuilds the export from scratch.
 - Each named export is self-contained inside `data_root / name`.
 
 ## License

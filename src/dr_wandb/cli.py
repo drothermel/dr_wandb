@@ -1,3 +1,5 @@
+"""wandb-export CLI entry point."""
+
 from __future__ import annotations
 
 import json
@@ -5,10 +7,14 @@ from pathlib import Path
 
 import typer
 
-from dr_wandb.export.engine import ExportEngine
-from dr_wandb.export.export_modes import ExportMode, FetchMode
-from dr_wandb.export.export_request import ExportRequest
-from dr_wandb.export.policy import HistoryWindow, StaticHistoryPolicy
+from dr_wandb.config import (
+    ExportMode,
+    ExportRequest,
+    HistorySelection,
+    HistoryWindow,
+    SyncMode,
+)
+from dr_wandb.engine import ExportEngine
 
 
 def export_command(
@@ -17,9 +23,7 @@ def export_command(
     name: str = typer.Option(..., "--name"),
     data_root: Path = typer.Option(Path("./data"), "--data-root"),
     mode: ExportMode = typer.Option(ExportMode.METADATA, "--mode"),
-    fetch_mode: FetchMode = typer.Option(
-        FetchMode.INCREMENTAL, "--fetch-mode"
-    ),
+    sync_mode: SyncMode = typer.Option(SyncMode.INCREMENTAL, "--sync-mode"),
     runs_per_page: int = typer.Option(500, "--runs-per-page"),
     timeout_seconds: int = typer.Option(120, "--timeout-seconds"),
     include_metadata: bool = typer.Option(
@@ -34,13 +38,14 @@ def export_command(
         value is not None and value != []
         for value in [history_key, min_step, max_step, max_records]
     )
-    assert mode == ExportMode.HISTORY or not has_history_selection, (
-        "History selection flags require --mode history"
-    )
+    if has_history_selection and mode != ExportMode.HISTORY:
+        raise typer.BadParameter(
+            "History selection flags require --mode history"
+        )
 
-    history_policy = None
+    history_selection = None
     if mode == ExportMode.HISTORY and has_history_selection:
-        history_policy = StaticHistoryPolicy(
+        history_selection = HistorySelection(
             keys=list(history_key) if history_key is not None else None,
             window=HistoryWindow(
                 min_step=min_step,
@@ -56,11 +61,11 @@ def export_command(
             name=name,
             data_root=data_root,
             mode=mode,
-            fetch_mode=fetch_mode,
+            sync_mode=sync_mode,
             runs_per_page=runs_per_page,
             timeout_seconds=timeout_seconds,
             include_metadata=include_metadata,
-            history_policy=history_policy,
+            history_selection=history_selection,
         )
     ).export()
     typer.echo(

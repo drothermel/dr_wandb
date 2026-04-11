@@ -143,12 +143,10 @@ dev = [
 
 [[package]]
 name = "dr-wandb"
-version = "2.0.0"
+version = "3.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "dr-ds" },
-    { name = "pandas" },
-    { name = "pyarrow" },
     { name = "pydantic" },
     { name = "srsly" },
     { name = "typer" },
@@ -165,8 +163,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dr-ds", directory = "../dr-ds" },
-    { name = "pandas", specifier = ">=2.3.2" },
-    { name = "pyarrow", specifier = ">=21.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "srsly", specifier = ">=2.5.3" },
     { name = "typer", specifier = ">=0.20.0" },

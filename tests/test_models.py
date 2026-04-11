@@ -4,14 +4,13 @@ from dr_wandb import (
     ExportMode,
     ExportRequest,
     ExportState,
-    FetchMode,
     HistoryRow,
     HistoryWindow,
-    RecordStore,
     RunSnapshot,
+    SyncMode,
     WandbRun,
 )
-from dr_wandb.export.export_state import RunTrackingState
+from dr_wandb.state import RunTrackingState
 
 from tests.helpers import history_run, metadata_run
 
@@ -109,7 +108,6 @@ def test_top_level_reexports_remain_available() -> None:
     window = HistoryWindow(min_step=1)
 
     assert request.mode == ExportMode.METADATA
-    assert request.fetch_mode == FetchMode.INCREMENTAL
+    assert request.sync_mode == SyncMode.INCREMENTAL
     assert state.name == "n"
     assert window.min_step == 1
-    assert RecordStore is not None

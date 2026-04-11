@@ -1,6 +1,6 @@
 [project]
 name = "dr-wandb"
-version = "2.0.0"
+version = "3.0.0"
 description = "Unified export toolkit for Weights & Biases"
 readme = "README.md"
 license = "MIT"
@@ -22,8 +22,6 @@ classifiers = [
 ]
 dependencies = [
     "dr-ds==0.1.1",
-    "pandas>=2.3.2",
-    "pyarrow>=21.0.0",
     "pydantic>=2.0.0",
     "srsly>=2.5.3",
     "typer>=0.20.0",
@@ -35,7 +33,7 @@ Homepage = "https://github.com/drothermel/dr_wandb"
 Repository = "https://github.com/drothermel/dr_wandb"
 
 [project.scripts]
-wandb-export = "dr_wandb.cli.export:main"
+wandb-export = "dr_wandb.cli:main"
 
 [build-system]
 requires = ["hatchling"]

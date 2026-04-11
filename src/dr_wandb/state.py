@@ -1,8 +1,10 @@
+"""Incremental export state: which runs have been seen and how far history has advanced."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from dr_wandb.export.wandb_run import WandbRun
+from dr_wandb.wandb_run import WandbRun
 
 
 class RunTrackingState(BaseModel):

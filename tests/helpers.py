@@ -1,3 +1,10 @@
+"""Lightweight fakes for the `wandb.Api` surface that ExportEngine touches.
+
+FakeRun mimics the `wandb.apis.public.Run` attributes we read (id, name, config,
+summary_metrics, tags, ..., plus scan_history). FakeApi mimics the subset of
+`wandb.Api.runs(...)` filtering we use (createdAt $gte, name $in).
+"""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

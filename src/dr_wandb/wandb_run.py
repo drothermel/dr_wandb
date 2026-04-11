@@ -1,3 +1,5 @@
+"""WandbRun: a Pydantic snapshot hydrated from a live W&B API run, plus RunSnapshot wrapper."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -91,6 +93,15 @@ class WandbRun(BaseModel):
             if isinstance(value, int):
                 return value
         return None
+
+
+class RunSnapshot(BaseModel):
+    run: WandbRun
+    exported_at: str
+
+    @property
+    def sort_key(self) -> tuple[str, str]:
+        return (self.run.created_at or "", self.run.run_id)
 
 
 def _optional_str(value: Any) -> str | None:
