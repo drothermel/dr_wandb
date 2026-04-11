@@ -13,6 +13,7 @@ from dr_wandb.export import (
     RecordStore,
     RunSnapshot,
     StaticHistoryPolicy,
+    WandbRun,
 )
 
 __all__ = [
@@ -30,4 +31,5 @@ __all__ = [
     "RecordStore",
     "RunSnapshot",
     "StaticHistoryPolicy",
+    "WandbRun",
 ]

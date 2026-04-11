@@ -54,7 +54,7 @@ def test_metadata_export_writes_named_store(
     assert manifest.history_path is None
     snapshots = store.load_run_snapshots()
     assert len(snapshots) == 1
-    assert snapshots[0].raw_run["config"]["lr"] == 0.001
+    assert snapshots[0].run.config["lr"] == 0.001
 
 
 def test_history_export_incremental_merges_rows(

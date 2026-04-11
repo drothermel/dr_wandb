@@ -9,7 +9,7 @@ from dr_wandb.export import engine as engine_module
 from tests.helpers import FakeApi, metadata_run
 
 
-def test_parquet_record_store_restores_raw_run_dict(
+def test_parquet_record_store_restores_wandb_run(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     runs = [
@@ -39,4 +39,4 @@ def test_parquet_record_store_restores_raw_run_dict(
 
     store = RecordStore.from_name_and_root("moe_runs", Path(tmp_path))
     snapshots = store.load_run_snapshots()
-    assert snapshots[0].raw_run["summaryMetrics"]["loss"] == 1.23
+    assert snapshots[0].run.summary_metrics["loss"] == 1.23

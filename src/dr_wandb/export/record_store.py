@@ -19,7 +19,7 @@ from dr_wandb.export.run_snapshot import RunSnapshot
 
 
 class RecordStore(BaseModel):
-    run_snapshot_json_columns: ClassVar[set[str]] = {"raw_run"}
+    run_snapshot_json_columns: ClassVar[set[str]] = {"run"}
     history_row_json_columns: ClassVar[set[str]] = {
         "wandb_metadata",
         "metrics",
@@ -82,7 +82,7 @@ class RecordStore(BaseModel):
             json_columns=self.run_snapshot_json_columns,
         )
         return {
-            snapshot.run_id: snapshot
+            snapshot.run.run_id: snapshot
             for snapshot in (
                 RunSnapshot.model_validate(record) for record in records
             )

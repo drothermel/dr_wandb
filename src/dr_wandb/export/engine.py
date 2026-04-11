@@ -18,10 +18,11 @@ from dr_wandb.export.history_export import (
     selected_history_keys,
     selected_history_window,
 )
+from dr_wandb.export.policy import HistoryPolicyContext
 from dr_wandb.export.record_store import RecordStore
-from dr_wandb.export.run_payloads import build_raw_run_payload
 from dr_wandb.export.run_selection import select_runs
 from dr_wandb.export.run_snapshot import RunSnapshot
+from dr_wandb.export.wandb_run import WandbRun
 
 
 def _build_default_api(timeout_seconds: int) -> Any:
@@ -61,50 +62,54 @@ class ExportEngine:
             existing_history_rows = []
 
         api = _build_default_api(request.timeout_seconds)
-        runs = select_runs(api=api, request=request, state=state)
+        raw_runs = select_runs(api=api, request=request, state=state)
         exported_at = utc_now_iso()
 
         snapshot_by_id = dict(existing_snapshots)
         new_history_rows = []
+        wandb_runs: list[WandbRun] = []
 
-        for run in runs:
-            run_id = str(getattr(run, "id", ""))
-            if run_id == "":
+        for raw_run in raw_runs:
+            wandb_run = WandbRun.from_wandb_run(
+                raw_run,
+                entity=request.entity,
+                project=request.project,
+                include_metadata=request.include_metadata,
+            )
+            if wandb_run.run_id == "":
                 continue
-            tracking = state.runs.get(run_id)
+            wandb_runs.append(wandb_run)
+
+            tracking = state.runs.get(wandb_run.run_id)
             last_history_step = (
                 tracking.last_history_step if tracking is not None else None
             )
-            raw_run = build_raw_run_payload(
-                run=run,
-                include_metadata=request.include_metadata,
-            )
-            snapshot_by_id[run_id] = RunSnapshot(
-                run_id=run_id,
-                entity=request.entity,
-                project=request.project,
+
+            snapshot_by_id[wandb_run.run_id] = RunSnapshot(
+                run=wandb_run,
                 exported_at=exported_at,
-                raw_run=raw_run,
             )
 
-            tracking_state = RunTrackingState.from_run(
-                run,
+            tracking_state = RunTrackingState.from_wandb_run(
+                wandb_run,
                 last_history_step=last_history_step,
             )
 
             if request.mode == ExportMode.HISTORY:
-                history_ctx = self._history_context(
-                    request=request,
-                    run=run,
+                ctx = HistoryPolicyContext.from_wandb_run(
+                    wandb_run=wandb_run,
+                    raw_run=raw_run,
                     run_last_history_step=last_history_step,
                 )
                 history_rows = scan_history_for_export(
                     request=request,
-                    ctx=history_ctx,
+                    ctx=ctx,
                 )
                 new_history_rows.extend(history_rows)
                 max_step = max_history_step(history_rows)
-                observed_last_step = observed_last_history_step(run)
+                observed_last_step = observed_last_history_step(
+                    wandb_run=wandb_run, raw_run=raw_run
+                )
                 if observed_last_step is not None:
                     max_step = (
                         observed_last_step
@@ -113,12 +118,12 @@ class ExportEngine:
                     )
                 tracking_state.last_history_step = max_step
 
-            state.runs[run_id] = tracking_state
-            if tracking_state.created_at is not None and (
+            state.runs[wandb_run.run_id] = tracking_state
+            if wandb_run.created_at is not None and (
                 state.max_created_at is None
-                or tracking_state.created_at > state.max_created_at
+                or wandb_run.created_at > state.max_created_at
             ):
-                state.max_created_at = tracking_state.created_at
+                state.max_created_at = wandb_run.created_at
 
         snapshots = sorted(
             snapshot_by_id.values(),
@@ -172,11 +177,13 @@ class ExportEngine:
             history_count=len(history_rows),
             selected_history_keys=selected_history_keys(
                 request=request,
-                runs=runs,
+                wandb_runs=wandb_runs,
+                raw_runs=raw_runs,
             ),
             history_window=selected_history_window(
                 request=request,
-                runs=runs,
+                wandb_runs=wandb_runs,
+                raw_runs=raw_runs,
             ),
         )
         paths.save_manifest(manifest)
@@ -198,20 +205,4 @@ class ExportEngine:
             run_count=len(snapshots),
             history_count=len(history_rows),
             exported_at=exported_at,
-        )
-
-    def _history_context(
-        self,
-        *,
-        request: ExportRequest,
-        run: Any,
-        run_last_history_step: int | None,
-    ) -> Any:
-        from dr_wandb.export.policy import HistoryPolicyContext
-
-        return HistoryPolicyContext.from_run(
-            entity=request.entity,
-            project=request.project,
-            run=run,
-            run_last_history_step=run_last_history_step,
         )
