@@ -37,11 +37,15 @@ class ExportPaths(BaseModel):
     def state_path(self) -> Path:
         return self.export_dir / self.state_filename
 
-    def runs_path(self, output_format: str) -> Path:
-        return self.export_dir / f"runs.{output_format}"
+    @computed_field
+    @property
+    def runs_path(self) -> Path:
+        return self.export_dir / "runs.jsonl"
 
-    def history_path(self, output_format: str) -> Path:
-        return self.export_dir / f"history.{output_format}"
+    @computed_field
+    @property
+    def history_path(self) -> Path:
+        return self.export_dir / "history.jsonl"
 
     def load_state(self, *, entity: str, project: str) -> ExportState:
         if not self.state_path.exists():

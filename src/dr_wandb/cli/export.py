@@ -2,16 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Literal
 
 import typer
 
 from dr_wandb.export.engine import ExportEngine
-from dr_wandb.export.models import (
-    ExportMode,
-    ExportRequest,
-    FetchMode,
-)
+from dr_wandb.export.export_modes import ExportMode, FetchMode
+from dr_wandb.export.export_request import ExportRequest
 from dr_wandb.export.policy import HistoryWindow, StaticHistoryPolicy
 
 
@@ -21,9 +17,6 @@ def export_command(
     name: str = typer.Option(..., "--name"),
     data_root: Path = typer.Option(Path("./data"), "--data-root"),
     mode: ExportMode = typer.Option(ExportMode.METADATA, "--mode"),
-    output_format: Literal["jsonl", "parquet"] = typer.Option(
-        "jsonl", "--output-format"
-    ),
     fetch_mode: FetchMode = typer.Option(
         FetchMode.INCREMENTAL, "--fetch-mode"
     ),
@@ -37,9 +30,6 @@ def export_command(
     max_step: int | None = typer.Option(None, "--max-step"),
     max_records: int | None = typer.Option(None, "--max-records"),
 ) -> None:
-    assert output_format in {"jsonl", "parquet"}, (
-        "--output-format must be one of: jsonl, parquet"
-    )
     has_history_selection = any(
         value is not None and value != []
         for value in [history_key, min_step, max_step, max_records]
@@ -66,7 +56,6 @@ def export_command(
             name=name,
             data_root=data_root,
             mode=mode,
-            output_format=output_format,
             fetch_mode=fetch_mode,
             runs_per_page=runs_per_page,
             timeout_seconds=timeout_seconds,

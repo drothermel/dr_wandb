@@ -10,7 +10,7 @@ from dr_wandb import ExportEngine, ExportMode, ExportRequest, RecordStore
 from tests.helpers import FakeApi, metadata_run
 
 
-def test_parquet_record_store_restores_wandb_run(
+def test_record_store_restores_wandb_run(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     runs = [
@@ -30,7 +30,6 @@ def test_parquet_record_store_restores_wandb_run(
             name="moe_runs",
             data_root=tmp_path,
             mode=ExportMode.METADATA,
-            output_format="parquet",
         )
     )
 

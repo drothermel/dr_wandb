@@ -92,28 +92,18 @@ class ExportEngine:
         existing.state.last_exported_at = exported_at
         store.paths.save_state(existing.state)
 
-        runs_output_path = store.write_run_snapshots(
-            output_format=request.output_format,
-            snapshots=snapshots,
-        )
+        runs_output_path = store.write_run_snapshots(snapshots=snapshots)
         if request.mode == ExportMode.HISTORY:
-            history_output_path = store.write_history_rows(
-                output_format=request.output_format,
-                rows=history_rows,
-            )
+            history_output_path = store.write_history_rows(rows=history_rows)
         else:
-            history_output_path = store.paths.history_path(
-                request.output_format
-            )
-            store.remove_history(output_format=request.output_format)
-        store.remove_other_formats(output_format=request.output_format)
+            history_output_path = store.paths.history_path
+            store.remove_history()
 
         manifest = ExportManifest(
             name=request.name,
             entity=request.entity,
             project=request.project,
             mode=request.mode,
-            output_format=request.output_format,
             created_at=(
                 existing.manifest.created_at
                 if existing.manifest is not None

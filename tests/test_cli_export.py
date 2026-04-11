@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 
 from dr_wandb.cli.export import export_command
-from dr_wandb.export.models import ExportMode, ExportSummary, FetchMode
+from dr_wandb.export.export_modes import ExportMode, FetchMode
+from dr_wandb.export.export_summary import ExportSummary
 
 
 def test_cli_export_builds_history_request(
@@ -40,7 +41,6 @@ def test_cli_export_builds_history_request(
         name="moe_history",
         data_root=tmp_path,
         mode=ExportMode.HISTORY,
-        output_format="jsonl",
         fetch_mode=FetchMode.INCREMENTAL,
         runs_per_page=500,
         timeout_seconds=120,

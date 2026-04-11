@@ -22,11 +22,8 @@ def test_export_paths_from_name_and_root(tmp_path: Path) -> None:
 def test_export_paths_build_run_and_history_paths(tmp_path: Path) -> None:
     paths = ExportPaths.from_name_and_root("moe_runs", tmp_path)
 
-    assert paths.runs_path("jsonl") == tmp_path / "moe_runs" / "runs.jsonl"
-    assert (
-        paths.history_path("parquet")
-        == tmp_path / "moe_runs" / "history.parquet"
-    )
+    assert paths.runs_path == tmp_path / "moe_runs" / "runs.jsonl"
+    assert paths.history_path == tmp_path / "moe_runs" / "history.jsonl"
 
 
 def test_export_paths_load_and_save_state(tmp_path: Path) -> None:
@@ -58,10 +55,9 @@ def test_export_paths_load_and_save_manifest(tmp_path: Path) -> None:
         entity="ml-moe",
         project="moe",
         mode=ExportMode.METADATA,
-        output_format="jsonl",
         created_at="2024-01-01T00:00:00+00:00",
         updated_at="2024-01-01T00:00:00+00:00",
-        runs_path=str(paths.runs_path("jsonl")),
+        runs_path=str(paths.runs_path),
         history_path=None,
         run_count=1,
         history_count=0,

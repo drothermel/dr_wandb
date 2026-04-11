@@ -49,8 +49,7 @@ Example history export:
 wandb-export ml-moe moe \
   --name moe_history \
   --data-root data \
-  --mode history \
-  --output-format parquet
+  --mode history
 ```
 
 This writes:
@@ -59,8 +58,8 @@ This writes:
 data/moe_history/
   manifest.json
   state.json
-  runs.parquet
-  history.parquet
+  runs.jsonl
+  history.jsonl
 ```
 
 History export can be limited with selection flags:
