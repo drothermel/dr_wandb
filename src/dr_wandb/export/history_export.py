@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 from typing import Any
 
 from dr_ds.serialization import to_jsonable
 
-from dr_wandb.export.export_manifest import ExportManifest
 from dr_wandb.export.export_request import ExportRequest
 from dr_wandb.export.export_modes import ExportMode, FetchMode
 from dr_wandb.export.policy import (
@@ -15,28 +13,7 @@ from dr_wandb.export.policy import (
     HistoryRow,
     HistoryWindow,
 )
-from dr_wandb.export.record_store import RecordStore
 from dr_wandb.export.wandb_run import WandbRun
-
-
-def load_existing_history_rows(
-    *,
-    store: RecordStore,
-    request: ExportRequest,
-    manifest: ExportManifest | None,
-) -> list[HistoryRow]:
-    if (
-        request.fetch_mode == FetchMode.FULL_RECONCILE
-        or request.mode != ExportMode.HISTORY
-        or manifest is None
-        or manifest.history_path is None
-    ):
-        return []
-    records = store.read_records(
-        path=Path(manifest.history_path),
-        json_columns=store.history_row_json_columns,
-    )
-    return [HistoryRow.model_validate(record) for record in records]
 
 
 def scan_history_for_export(

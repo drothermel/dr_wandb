@@ -10,7 +10,6 @@ from dr_wandb.export.export_request import ExportRequest
 from dr_wandb.export.export_state import ExportState, RunTrackingState
 from dr_wandb.export.export_summary import ExportSummary
 from dr_wandb.export.history_export import (
-    load_existing_history_rows,
     max_history_step,
     merge_history_rows,
     observed_last_history_step,
@@ -46,8 +45,7 @@ class ExportEngine:
             request=request,
             manifest=existing_manifest,
         )
-        existing_history_rows = load_existing_history_rows(
-            store=store,
+        existing_history_rows = store.load_existing_history_rows(
             request=request,
             manifest=existing_manifest,
         )
