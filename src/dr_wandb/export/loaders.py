@@ -4,18 +4,20 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from dr_wandb.export.export_paths import ExportPaths
 from dr_wandb.export.models import ExportManifest, HistoryRow, RunSnapshot
 from dr_wandb.export.store import (
     HISTORY_ROW_JSON_COLUMNS,
     RUN_SNAPSHOT_JSON_COLUMNS,
     load_manifest as _load_manifest,
     read_records,
-    resolve_export_paths,
 )
 
 
 def load_manifest(name: str, data_root: Path) -> ExportManifest:
-    paths = resolve_export_paths(name=name, data_root=Path(data_root))
+    paths = ExportPaths.from_name_and_root(
+        name=name, data_root=Path(data_root)
+    )
     manifest = _load_manifest(paths)
     assert manifest is not None, f"Missing manifest for export {name!r}"
     return manifest

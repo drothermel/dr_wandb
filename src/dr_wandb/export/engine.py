@@ -20,16 +20,14 @@ from dr_wandb.export.models import (
     RunSnapshot,
     RunTrackingState,
 )
+from dr_wandb.export.export_paths import ExportPaths
 from dr_wandb.export.store import (
     HISTORY_ROW_JSON_COLUMNS,
     RUN_SNAPSHOT_JSON_COLUMNS,
-    history_path,
     load_manifest,
     load_state,
     read_records,
     remove_if_exists,
-    resolve_export_paths,
-    runs_path,
     save_manifest,
     save_state,
     write_records,
@@ -55,8 +53,9 @@ class ExportEngine:
         self.api_factory = api_factory or _build_default_api
 
     def export(self, request: ExportRequest) -> ExportSummary:
-        paths = resolve_export_paths(
-            name=request.name, data_root=request.data_root
+        paths = ExportPaths.from_name_and_root(
+            name=request.name,
+            data_root=request.data_root,
         )
         state = load_state(
             paths, entity=request.entity, project=request.project
@@ -174,8 +173,8 @@ class ExportEngine:
         state.last_exported_at = exported_at
         save_state(paths, state)
 
-        runs_output_path = runs_path(paths, request.output_format)
-        history_output_path = history_path(paths, request.output_format)
+        runs_output_path = paths.runs_path(request.output_format)
+        history_output_path = paths.history_path(request.output_format)
         write_records(
             runs_output_path,
             [snapshot.model_dump(mode="python") for snapshot in snapshots],
@@ -190,8 +189,8 @@ class ExportEngine:
         else:
             remove_if_exists(history_output_path)
         for other_format in {"jsonl", "parquet"} - {request.output_format}:
-            remove_if_exists(runs_path(paths, other_format))
-            remove_if_exists(history_path(paths, other_format))
+            remove_if_exists(paths.runs_path(other_format))
+            remove_if_exists(paths.history_path(other_format))
 
         selected_history_keys = self._selected_history_keys(
             request=request,

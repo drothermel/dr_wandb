@@ -8,40 +8,13 @@ from typing import Any, cast
 from dr_ds.parquet import parquet_frame_to_records, records_to_parquet_frame
 from dr_ds.serialization import dump_json_atomic, to_jsonable
 import pandas as pd
-from pydantic import BaseModel
 import srsly
 
+from dr_wandb.export.export_paths import ExportPaths
 from dr_wandb.export.models import ExportManifest, ExportState
 
 RUN_SNAPSHOT_JSON_COLUMNS = {"raw_run"}
 HISTORY_ROW_JSON_COLUMNS = {"wandb_metadata", "metrics", "extra"}
-
-
-class ExportPaths(BaseModel):
-    name: str
-    data_root: Path
-    export_dir: Path
-    manifest_path: Path
-    state_path: Path
-
-
-def resolve_export_paths(*, name: str, data_root: Path) -> ExportPaths:
-    export_dir = Path(data_root) / name
-    return ExportPaths(
-        name=name,
-        data_root=Path(data_root),
-        export_dir=export_dir,
-        manifest_path=export_dir / "manifest.json",
-        state_path=export_dir / "state.json",
-    )
-
-
-def runs_path(paths: ExportPaths, output_format: str) -> Path:
-    return paths.export_dir / f"runs.{output_format}"
-
-
-def history_path(paths: ExportPaths, output_format: str) -> Path:
-    return paths.export_dir / f"history.{output_format}"
 
 
 def load_state(
