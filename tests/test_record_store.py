@@ -2,17 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dr_wandb import (
-    ExportEngine,
-    ExportMode,
-    ExportRequest,
-    load_run_snapshot_dicts,
-)
+from dr_wandb import ExportEngine, ExportMode, ExportRequest, RecordStore
 
 from tests.helpers import FakeApi, metadata_run
 
 
-def test_parquet_loader_restores_raw_run_dict(tmp_path: Path) -> None:
+def test_parquet_record_store_restores_raw_run_dict(tmp_path: Path) -> None:
     runs = [
         metadata_run(
             "run-1",
@@ -33,5 +28,6 @@ def test_parquet_loader_restores_raw_run_dict(tmp_path: Path) -> None:
         )
     )
 
-    payloads = load_run_snapshot_dicts("moe_runs", Path(tmp_path))
+    store = RecordStore.from_name_and_root("moe_runs", Path(tmp_path))
+    payloads = store.load_run_snapshot_dicts()
     assert payloads[0]["raw_run"]["summaryMetrics"]["loss"] == 1.23

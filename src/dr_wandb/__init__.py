@@ -10,12 +10,9 @@ from dr_wandb.export import (
     HistoryPolicyContext,
     HistoryRow,
     HistoryWindow,
+    RecordStore,
     RunSnapshot,
     StaticHistoryPolicy,
-    iter_history_rows,
-    load_manifest,
-    load_run_snapshot_dicts,
-    load_run_snapshots,
 )
 
 __all__ = [
@@ -30,10 +27,7 @@ __all__ = [
     "HistoryPolicyContext",
     "HistoryRow",
     "HistoryWindow",
+    "RecordStore",
     "RunSnapshot",
     "StaticHistoryPolicy",
-    "iter_history_rows",
-    "load_manifest",
-    "load_run_snapshot_dicts",
-    "load_run_snapshots",
 ]

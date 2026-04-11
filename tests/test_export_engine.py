@@ -7,9 +7,7 @@ from dr_wandb import (
     ExportMode,
     ExportRequest,
     FetchMode,
-    iter_history_rows,
-    load_manifest,
-    load_run_snapshots,
+    RecordStore,
 )
 
 from tests.helpers import FakeApi, history_run, metadata_run
@@ -37,9 +35,11 @@ def test_metadata_export_writes_named_store(tmp_path: Path) -> None:
     )
 
     assert summary.run_count == 1
-    manifest = load_manifest("moe_runs", tmp_path)
+    store = RecordStore.from_name_and_root("moe_runs", tmp_path)
+    manifest = store.load_manifest()
+    assert manifest is not None
     assert manifest.history_path is None
-    snapshots = load_run_snapshots("moe_runs", tmp_path)
+    snapshots = store.load_run_snapshots()
     assert len(snapshots) == 1
     assert snapshots[0].raw_run["config"]["lr"] == 0.001
 
@@ -88,5 +88,6 @@ def test_history_export_incremental_merges_rows(tmp_path: Path) -> None:
     )
 
     assert summary.history_count == 3
-    rows = list(iter_history_rows("moe_history", tmp_path))
+    store = RecordStore.from_name_and_root("moe_history", tmp_path)
+    rows = list(store.iter_history_rows())
     assert [row.step for row in rows] == [1, 2, 3]

@@ -20,14 +20,7 @@ from dr_wandb.export.models import (
     RunSnapshot,
     RunTrackingState,
 )
-from dr_wandb.export.export_paths import ExportPaths
-from dr_wandb.export.store import (
-    HISTORY_ROW_JSON_COLUMNS,
-    RUN_SNAPSHOT_JSON_COLUMNS,
-    read_records,
-    remove_if_exists,
-    write_records,
-)
+from dr_wandb.export.record_store import RecordStore
 from dr_ds.serialization import serialize_timestamp, to_jsonable, utc_now_iso
 
 TERMINAL_RUN_STATES = {"finished", "failed", "crashed", "killed"}
@@ -49,22 +42,25 @@ class ExportEngine:
         self.api_factory = api_factory or _build_default_api
 
     def export(self, request: ExportRequest) -> ExportSummary:
-        paths = ExportPaths.from_name_and_root(
+        store = RecordStore.from_name_and_root(
             name=request.name,
             data_root=request.data_root,
         )
+        paths = store.paths
         state = paths.load_state(
             entity=request.entity, project=request.project
         )
         state.name = request.name
         state.entity = request.entity
         state.project = request.project
-        existing_manifest = paths.load_manifest()
+        existing_manifest = store.load_manifest()
         existing_snapshots = self._load_existing_snapshots(
+            store=store,
             request=request,
             manifest=existing_manifest,
         )
         existing_history_rows = self._load_existing_history_rows(
+            store=store,
             request=request,
             manifest=existing_manifest,
         )
@@ -171,22 +167,22 @@ class ExportEngine:
 
         runs_output_path = paths.runs_path(request.output_format)
         history_output_path = paths.history_path(request.output_format)
-        write_records(
+        store.write_records(
             runs_output_path,
             [snapshot.model_dump(mode="python") for snapshot in snapshots],
-            json_columns=RUN_SNAPSHOT_JSON_COLUMNS,
+            json_columns=store.run_snapshot_json_columns,
         )
         if request.mode == ExportMode.HISTORY:
-            write_records(
+            store.write_records(
                 history_output_path,
                 [row.model_dump(mode="python") for row in history_rows],
-                json_columns=HISTORY_ROW_JSON_COLUMNS,
+                json_columns=store.history_row_json_columns,
             )
         else:
-            remove_if_exists(history_output_path)
+            store.remove_if_exists(history_output_path)
         for other_format in {"jsonl", "parquet"} - {request.output_format}:
-            remove_if_exists(paths.runs_path(other_format))
-            remove_if_exists(paths.history_path(other_format))
+            store.remove_if_exists(paths.runs_path(other_format))
+            store.remove_if_exists(paths.history_path(other_format))
 
         selected_history_keys = self._selected_history_keys(
             request=request,
@@ -243,14 +239,15 @@ class ExportEngine:
     def _load_existing_snapshots(
         self,
         *,
+        store: RecordStore,
         request: ExportRequest,
         manifest: ExportManifest | None,
     ) -> dict[str, RunSnapshot]:
         if request.fetch_mode == FetchMode.FULL_RECONCILE or manifest is None:
             return {}
-        records = read_records(
+        records = store.read_records(
             path=Path(manifest.runs_path),
-            json_columns=RUN_SNAPSHOT_JSON_COLUMNS,
+            json_columns=store.run_snapshot_json_columns,
         )
         return {
             snapshot.run_id: snapshot
@@ -262,6 +259,7 @@ class ExportEngine:
     def _load_existing_history_rows(
         self,
         *,
+        store: RecordStore,
         request: ExportRequest,
         manifest: ExportManifest | None,
     ) -> list[HistoryRow]:
@@ -272,9 +270,9 @@ class ExportEngine:
             or manifest.history_path is None
         ):
             return []
-        records = read_records(
+        records = store.read_records(
             path=Path(manifest.history_path),
-            json_columns=HISTORY_ROW_JSON_COLUMNS,
+            json_columns=store.history_row_json_columns,
         )
         return [HistoryRow.model_validate(record) for record in records]
 
