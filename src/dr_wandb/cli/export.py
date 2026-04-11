@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal
 
 import typer
 
@@ -16,7 +17,9 @@ def export_command(
     name: str = typer.Option(..., "--name"),
     data_root: Path = typer.Option(Path("./data"), "--data-root"),
     mode: ExportMode = typer.Option(ExportMode.METADATA, "--mode"),
-    output_format: str = typer.Option("jsonl", "--output-format"),
+    output_format: Literal["jsonl", "parquet"] = typer.Option(
+        "jsonl", "--output-format"
+    ),
     fetch_mode: FetchMode = typer.Option(FetchMode.INCREMENTAL, "--fetch-mode"),
     runs_per_page: int = typer.Option(500, "--runs-per-page"),
     timeout_seconds: int = typer.Option(120, "--timeout-seconds"),
@@ -35,9 +38,9 @@ def export_command(
         value is not None and value != []
         for value in [history_key, min_step, max_step, max_records]
     )
-    assert (
-        mode == ExportMode.HISTORY or not has_history_selection
-    ), "History selection flags require --mode history"
+    assert mode == ExportMode.HISTORY or not has_history_selection, (
+        "History selection flags require --mode history"
+    )
 
     history_policy = None
     if mode == ExportMode.HISTORY and has_history_selection:

@@ -47,9 +47,7 @@ def history_path(paths: ExportPaths, output_format: str) -> Path:
     return paths.export_dir / f"history.{output_format}"
 
 
-def load_state(
-    paths: ExportPaths, *, entity: str, project: str
-) -> ExportState:
+def load_state(paths: ExportPaths, *, entity: str, project: str) -> ExportState:
     if not paths.state_path.exists():
         return ExportState(name=paths.name, entity=entity, project=project)
     return ExportState.model_validate(load_json(paths.state_path))
@@ -102,9 +100,7 @@ def write_records(
             delete=False,
         ) as handle:
             for record in records:
-                handle.write(
-                    json.dumps(to_jsonable(record), sort_keys=True) + "\n"
-                )
+                handle.write(json.dumps(to_jsonable(record), sort_keys=True) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
             tmp_name = handle.name

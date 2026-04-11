@@ -2,12 +2,9 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-
-if TYPE_CHECKING:
-    from dr_wandb.export.policy import HistoryPolicy
 
 
 class ExportMode(StrEnum):
@@ -105,7 +102,7 @@ class ExportRequest(BaseModel):
     runs_per_page: int = 500
     timeout_seconds: int = 120
     include_metadata: bool = False
-    history_policy: HistoryPolicy | None = None
+    history_policy: Any = None
 
 
 class ExportSummary(BaseModel):

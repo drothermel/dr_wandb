@@ -12,10 +12,7 @@ MAX_INT = 2**31 - 1
 
 def _convert_large_ints(value: Any) -> Any:
     if isinstance(value, dict):
-        return {
-            str(key): _convert_large_ints(nested)
-            for key, nested in value.items()
-        }
+        return {str(key): _convert_large_ints(nested) for key, nested in value.items()}
     if isinstance(value, list):
         return [_convert_large_ints(nested) for nested in value]
     if isinstance(value, int) and abs(value) > MAX_INT:

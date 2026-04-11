@@ -142,12 +142,9 @@ class ExportEngine:
                 tracking_state.last_history_step = max_step
 
             state.runs[run_id] = tracking_state
-            if (
-                tracking_state.created_at is not None
-                and (
-                    state.max_created_at is None
-                    or tracking_state.created_at > state.max_created_at
-                )
+            if tracking_state.created_at is not None and (
+                state.max_created_at is None
+                or tracking_state.created_at > state.max_created_at
             ):
                 state.max_created_at = tracking_state.created_at
 
@@ -204,9 +201,7 @@ class ExportEngine:
             updated_at=exported_at,
             runs_path=str(runs_output_path),
             history_path=(
-                str(history_output_path)
-                if request.mode == ExportMode.HISTORY
-                else None
+                str(history_output_path) if request.mode == ExportMode.HISTORY else None
             ),
             run_count=len(snapshots),
             history_count=len(history_rows),
@@ -225,9 +220,7 @@ class ExportEngine:
             manifest_path=str(paths.manifest_path),
             runs_path=str(runs_output_path),
             history_path=(
-                str(history_output_path)
-                if request.mode == ExportMode.HISTORY
-                else None
+                str(history_output_path) if request.mode == ExportMode.HISTORY else None
             ),
             run_count=len(snapshots),
             history_count=len(history_rows),
@@ -248,9 +241,7 @@ class ExportEngine:
         )
         return {
             snapshot.run_id: snapshot
-            for snapshot in (
-                RunSnapshot.model_validate(record) for record in records
-            )
+            for snapshot in (RunSnapshot.model_validate(record) for record in records)
         }
 
     def _load_existing_history_rows(
@@ -348,9 +339,7 @@ class ExportEngine:
     def _chunked(self, values: list[str], size: int) -> list[list[str]]:
         return [values[index : index + size] for index in range(0, len(values), size)]
 
-    def _should_refresh_tracking_state(
-        self, tracking: RunTrackingState
-    ) -> bool:
+    def _should_refresh_tracking_state(self, tracking: RunTrackingState) -> bool:
         return tracking.run_state not in TERMINAL_RUN_STATES
 
     def _run_state(self, run: Any) -> str | None:
@@ -461,19 +450,14 @@ class ExportEngine:
             return value
         return None
 
-    def _build_history_row(
-        self, run_id: str, entry: dict[str, Any]
-    ) -> HistoryRow:
+    def _build_history_row(self, run_id: str, entry: dict[str, Any]) -> HistoryRow:
+        wandb_value = entry.get("_wandb")
         return HistoryRow(
             run_id=run_id,
             step=entry.get("_step") if isinstance(entry.get("_step"), int) else None,
             timestamp=serialize_timestamp(entry.get("_timestamp")),
             runtime=entry.get("_runtime"),
-            wandb_metadata=(
-                dict(entry.get("_wandb"))
-                if isinstance(entry.get("_wandb"), dict)
-                else {}
-            ),
+            wandb_metadata=dict(wandb_value) if isinstance(wandb_value, dict) else {},
             metrics={
                 str(key): value
                 for key, value in entry.items()
@@ -483,8 +467,7 @@ class ExportEngine:
                 str(key): value
                 for key, value in entry.items()
                 if str(key).startswith("_")
-                and str(key)
-                not in {"_step", "_timestamp", "_runtime", "_wandb"}
+                and str(key) not in {"_step", "_timestamp", "_runtime", "_wandb"}
             },
         )
 
@@ -537,9 +520,7 @@ class ExportEngine:
             return (row.run_id, row.timestamp, payload_hash)
         return (row.run_id, payload_hash)
 
-    def _sorted_snapshots(
-        self, snapshots: Any
-    ) -> list[RunSnapshot]:
+    def _sorted_snapshots(self, snapshots: Any) -> list[RunSnapshot]:
         return sorted(
             snapshots,
             key=lambda snapshot: (
@@ -662,9 +643,7 @@ class ExportEngine:
             result.pop("storage_id", None)
         return result
 
-    def _fill_if_missing(
-        self, payload: dict[str, Any], key: str, value: Any
-    ) -> None:
+    def _fill_if_missing(self, payload: dict[str, Any], key: str, value: Any) -> None:
         if key in payload and payload[key] is not None:
             return
         if value is None:

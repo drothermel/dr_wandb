@@ -38,18 +38,14 @@ def load_run_snapshots(name: str, data_root: Path) -> list[RunSnapshot]:
     )
 
 
-def load_run_snapshot_dicts(
-    name: str, data_root: Path
-) -> list[dict[str, Any]]:
+def load_run_snapshot_dicts(name: str, data_root: Path) -> list[dict[str, Any]]:
     return [
         snapshot.model_dump(mode="python")
         for snapshot in load_run_snapshots(name, data_root)
     ]
 
 
-def iter_history_rows(
-    name: str, data_root: Path
-) -> Iterator[HistoryRow]:
+def iter_history_rows(name: str, data_root: Path) -> Iterator[HistoryRow]:
     manifest = load_manifest(name, data_root)
     if manifest.history_path is None:
         return iter(())

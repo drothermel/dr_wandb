@@ -41,9 +41,7 @@ def parse_jsonish(value: Any) -> Any:
     if stripped == "":
         return value
     if not (
-        stripped.startswith("{")
-        or stripped.startswith("[")
-        or stripped.startswith('"')
+        stripped.startswith("{") or stripped.startswith("[") or stripped.startswith('"')
     ):
         return value
     return json.loads(stripped)

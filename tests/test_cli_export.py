@@ -10,7 +10,7 @@ from dr_wandb.export.models import ExportMode, ExportSummary, FetchMode
 def test_cli_export_builds_history_request(monkeypatch, capsys, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def fake_export(self, request):  # type: ignore[no-untyped-def]
+    def fake_export(self, request):
         captured["request"] = request
         return ExportSummary(
             name=request.name,
@@ -38,6 +38,9 @@ def test_cli_export_builds_history_request(monkeypatch, capsys, tmp_path: Path) 
         mode=ExportMode.HISTORY,
         output_format="jsonl",
         fetch_mode=FetchMode.INCREMENTAL,
+        runs_per_page=500,
+        timeout_seconds=120,
+        include_metadata=False,
         history_key=["eval/loss"],
         min_step=100,
         max_step=None,
