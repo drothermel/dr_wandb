@@ -5,23 +5,19 @@ from typing import Any
 
 import pandas as pd
 
-from dr_wandb.shared.serialization import parse_jsonish, to_jsonable
-
-MAX_INT = 2**31 - 1
-
-
-def _convert_large_ints(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(key): _convert_large_ints(nested) for key, nested in value.items()}
-    if isinstance(value, list):
-        return [_convert_large_ints(nested) for nested in value]
-    if isinstance(value, int) and abs(value) > MAX_INT:
-        return float(value)
-    return value
+from dr_wandb.shared.serialization import (
+    DEFAULT_MAX_INT,
+    convert_large_ints,
+    parse_jsonish,
+    to_jsonable,
+)
 
 
 def records_to_parquet_frame(
-    records: list[dict[str, Any]], *, json_columns: set[str]
+    records: list[dict[str, Any]],
+    *,
+    json_columns: set[str],
+    max_int: int = DEFAULT_MAX_INT,
 ) -> pd.DataFrame:
     normalized: list[dict[str, Any]] = []
     for record in records:
@@ -29,10 +25,10 @@ def records_to_parquet_frame(
         for key, value in record.items():
             if key in json_columns:
                 row[key] = json.dumps(
-                    to_jsonable(_convert_large_ints(value)),
+                    to_jsonable(convert_large_ints(value, max_int=max_int)),
                     sort_keys=True,
                 )
-            elif isinstance(value, int) and abs(value) > MAX_INT:
+            elif isinstance(value, int) and abs(value) > max_int:
                 row[key] = float(value)
             else:
                 row[key] = value

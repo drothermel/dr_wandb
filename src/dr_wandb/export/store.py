@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 from pydantic import BaseModel
+import srsly
 
 from dr_wandb.export.models import ExportManifest, ExportState
 from dr_wandb.shared.parquet import (
     parquet_frame_to_records,
     records_to_parquet_frame,
 )
-from dr_wandb.shared.serialization import dump_json_atomic, load_json, to_jsonable
+from dr_wandb.shared.serialization import dump_json_atomic, to_jsonable
 
 RUN_SNAPSHOT_JSON_COLUMNS = {"raw_run"}
 HISTORY_ROW_JSON_COLUMNS = {"wandb_metadata", "metrics", "extra"}
@@ -50,7 +50,7 @@ def history_path(paths: ExportPaths, output_format: str) -> Path:
 def load_state(paths: ExportPaths, *, entity: str, project: str) -> ExportState:
     if not paths.state_path.exists():
         return ExportState(name=paths.name, entity=entity, project=project)
-    return ExportState.model_validate(load_json(paths.state_path))
+    return ExportState.model_validate(srsly.read_json(paths.state_path))
 
 
 def save_state(paths: ExportPaths, state: ExportState) -> None:
@@ -60,7 +60,7 @@ def save_state(paths: ExportPaths, state: ExportState) -> None:
 def load_manifest(paths: ExportPaths) -> ExportManifest | None:
     if not paths.manifest_path.exists():
         return None
-    return ExportManifest.model_validate(load_json(paths.manifest_path))
+    return ExportManifest.model_validate(srsly.read_json(paths.manifest_path))
 
 
 def save_manifest(paths: ExportPaths, manifest: ExportManifest) -> None:
@@ -71,14 +71,7 @@ def read_records(path: Path, *, json_columns: set[str]) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     if path.suffix == ".jsonl":
-        records: list[dict[str, Any]] = []
-        with open(path, encoding="utf-8") as handle:
-            for line in handle:
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                records.append(json.loads(stripped))
-        return records
+        return [cast(dict[str, Any], record) for record in srsly.read_jsonl(path)]
     frame = pd.read_parquet(path)
     return parquet_frame_to_records(frame, json_columns=json_columns)
 
@@ -100,7 +93,9 @@ def write_records(
             delete=False,
         ) as handle:
             for record in records:
-                handle.write(json.dumps(to_jsonable(record), sort_keys=True) + "\n")
+                handle.write(
+                    srsly.json_dumps(to_jsonable(record), sort_keys=True) + "\n"
+                )
             handle.flush()
             os.fsync(handle.fileno())
             tmp_name = handle.name
