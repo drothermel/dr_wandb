@@ -24,12 +24,8 @@ from dr_wandb.export.export_paths import ExportPaths
 from dr_wandb.export.store import (
     HISTORY_ROW_JSON_COLUMNS,
     RUN_SNAPSHOT_JSON_COLUMNS,
-    load_manifest,
-    load_state,
     read_records,
     remove_if_exists,
-    save_manifest,
-    save_state,
     write_records,
 )
 from dr_ds.serialization import serialize_timestamp, to_jsonable, utc_now_iso
@@ -57,13 +53,13 @@ class ExportEngine:
             name=request.name,
             data_root=request.data_root,
         )
-        state = load_state(
-            paths, entity=request.entity, project=request.project
+        state = paths.load_state(
+            entity=request.entity, project=request.project
         )
         state.name = request.name
         state.entity = request.entity
         state.project = request.project
-        existing_manifest = load_manifest(paths)
+        existing_manifest = paths.load_manifest()
         existing_snapshots = self._load_existing_snapshots(
             request=request,
             manifest=existing_manifest,
@@ -171,7 +167,7 @@ class ExportEngine:
             history_rows = []
 
         state.last_exported_at = exported_at
-        save_state(paths, state)
+        paths.save_state(state)
 
         runs_output_path = paths.runs_path(request.output_format)
         history_output_path = paths.history_path(request.output_format)
@@ -223,7 +219,7 @@ class ExportEngine:
             selected_history_keys=selected_history_keys,
             history_window=selected_history_window,
         )
-        save_manifest(paths, manifest)
+        paths.save_manifest(manifest)
         return ExportSummary(
             name=request.name,
             entity=request.entity,

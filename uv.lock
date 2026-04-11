@@ -120,14 +120,25 @@ wheels = [
 [[package]]
 name = "dr-ds"
 version = "0.1.1"
-source = { registry = "https://pypi.org/simple" }
+source = { directory = "../dr-ds" }
 dependencies = [
     { name = "pandas" },
+    { name = "pyarrow" },
     { name = "srsly" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c5/9b/fdf0534f20213b3568bdb3e784d725947a7fb4530870e8d82c6ecb7dd94a/dr_ds-0.1.1.tar.gz", hash = "sha256:efa5babff59a38f3e7df728caeac83fc367b242bcd690808808a7de4bc2fab84", size = 23307 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/94/7b/6bbee4e7cfba56eea585a9ccaafa7e7775eda9a539ea18bee06e782a7e52/dr_ds-0.1.1-py3-none-any.whl", hash = "sha256:e95ce6d4c7611132eb58a9790f543bf67680ee18ed7f8f2ce8148166261beae9", size = 5425 },
+
+[package.metadata]
+requires-dist = [
+    { name = "pandas", specifier = ">=2.3.3" },
+    { name = "pyarrow", specifier = ">=21.0.0" },
+    { name = "srsly", specifier = ">=2.5.3" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.3" },
+    { name = "ruff", specifier = ">=0.15.10" },
+    { name = "ty", specifier = ">=0.0.29" },
 ]
 
 [[package]]
@@ -153,7 +164,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "dr-ds", specifier = "==0.1.1" },
+    { name = "dr-ds", directory = "../dr-ds" },
     { name = "pandas", specifier = ">=2.3.2" },
     { name = "pyarrow", specifier = ">=21.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },

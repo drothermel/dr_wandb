@@ -3,7 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar
 
+from dr_ds.atomic_io import dump_json_atomic
 from pydantic import BaseModel, computed_field
+import srsly
+
+from dr_wandb.export.models import ExportManifest, ExportState
 
 
 class ExportPaths(BaseModel):
@@ -40,3 +44,24 @@ class ExportPaths(BaseModel):
 
     def history_path(self, output_format: str) -> Path:
         return self.export_dir / f"history.{output_format}"
+
+    def load_state(self, *, entity: str, project: str) -> ExportState:
+        if not self.state_path.exists():
+            return ExportState(name=self.name, entity=entity, project=project)
+        return ExportState.model_validate(srsly.read_json(self.state_path))
+
+    def save_state(self, state: ExportState) -> None:
+        dump_json_atomic(self.state_path, state.model_dump(mode="python"))
+
+    def load_manifest(self) -> ExportManifest | None:
+        if not self.manifest_path.exists():
+            return None
+        return ExportManifest.model_validate(
+            srsly.read_json(self.manifest_path)
+        )
+
+    def save_manifest(self, manifest: ExportManifest) -> None:
+        dump_json_atomic(
+            self.manifest_path,
+            manifest.model_dump(mode="python"),
+        )

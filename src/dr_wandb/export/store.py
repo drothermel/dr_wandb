@@ -1,42 +1,15 @@
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 from typing import Any, cast
 
-from dr_ds.parquet import parquet_frame_to_records, records_to_parquet_frame
-from dr_ds.serialization import dump_json_atomic, to_jsonable
+from dr_ds.atomic_io import atomic_write_jsonl, atomic_write_parquet_records
+from dr_ds.parquet import parquet_frame_to_records
 import pandas as pd
 import srsly
 
-from dr_wandb.export.export_paths import ExportPaths
-from dr_wandb.export.models import ExportManifest, ExportState
-
 RUN_SNAPSHOT_JSON_COLUMNS = {"raw_run"}
 HISTORY_ROW_JSON_COLUMNS = {"wandb_metadata", "metrics", "extra"}
-
-
-def load_state(
-    paths: ExportPaths, *, entity: str, project: str
-) -> ExportState:
-    if not paths.state_path.exists():
-        return ExportState(name=paths.name, entity=entity, project=project)
-    return ExportState.model_validate(srsly.read_json(paths.state_path))
-
-
-def save_state(paths: ExportPaths, state: ExportState) -> None:
-    dump_json_atomic(paths.state_path, state.model_dump(mode="python"))
-
-
-def load_manifest(paths: ExportPaths) -> ExportManifest | None:
-    if not paths.manifest_path.exists():
-        return None
-    return ExportManifest.model_validate(srsly.read_json(paths.manifest_path))
-
-
-def save_manifest(paths: ExportPaths, manifest: ExportManifest) -> None:
-    dump_json_atomic(paths.manifest_path, manifest.model_dump(mode="python"))
 
 
 def read_records(
@@ -58,40 +31,11 @@ def write_records(
     *,
     json_columns: set[str],
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     if path.suffix == ".jsonl":
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=path.name,
-            suffix=".tmp",
-            delete=False,
-        ) as handle:
-            for record in records:
-                handle.write(
-                    srsly.json_dumps(to_jsonable(record), sort_keys=True)
-                    + "\n"
-                )
-            handle.flush()
-            os.fsync(handle.fileno())
-            tmp_name = handle.name
-        os.replace(tmp_name, path)
+        atomic_write_jsonl(path, records)
         return
 
-    with tempfile.NamedTemporaryFile(
-        mode="wb",
-        dir=path.parent,
-        prefix=path.name,
-        suffix=".tmp",
-        delete=False,
-    ) as handle:
-        tmp_path = Path(handle.name)
-    frame = records_to_parquet_frame(records, json_columns=json_columns)
-    frame.to_parquet(tmp_path)
-    with open(tmp_path, "rb") as handle:
-        os.fsync(handle.fileno())
-    os.replace(tmp_path, path)
+    atomic_write_parquet_records(path, records, json_columns=json_columns)
 
 
 def remove_if_exists(path: Path) -> None:

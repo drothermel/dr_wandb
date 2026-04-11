@@ -53,6 +53,9 @@ exclude = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/dr_wandb"]
 
+[tool.uv.sources]
+dr-ds = { path = "../dr-ds" }
+
 [dependency-groups]
 dev = [
     "pytest>=8.4.1",
