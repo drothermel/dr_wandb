@@ -1,13 +1,19 @@
-"""Select W&B runs to export: incremental (new + refresh non-terminal) or full list."""
-
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any
 
 from dr_wandb.config import ExportRequest, SyncMode
 from dr_wandb.state import ExportState, RunTrackingState
 
-TERMINAL_RUN_STATES = {"finished", "failed", "crashed", "killed"}
+
+class TerminalRunState(StrEnum):
+    FINISHED = "finished"
+    FAILED = "failed"
+    CRASHED = "crashed"
+    KILLED = "killed"
+
+
 RUN_BATCH_SIZE = 100
 
 
@@ -90,4 +96,4 @@ def _chunked(values: list[str], size: int) -> list[list[str]]:
 
 
 def _should_refresh(tracking: RunTrackingState) -> bool:
-    return tracking.run_state not in TERMINAL_RUN_STATES
+    return tracking.run_state not in TerminalRunState
