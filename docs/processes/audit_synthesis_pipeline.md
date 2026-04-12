@@ -1,1 +1,0 @@
-/Users/daniellerothermel/drotherm/repos/dr_ref/docs/processes/audit_synthesis_pipeline.md
