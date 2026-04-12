@@ -1,5 +1,3 @@
-"""History row model plus scan, merge, and step-tracking helpers for W&B run history."""
-
 from __future__ import annotations
 
 import hashlib

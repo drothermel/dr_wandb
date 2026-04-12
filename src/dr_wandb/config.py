@@ -1,5 +1,3 @@
-"""Export request config: what to export, how to sync, and which history rows to include."""
-
 from __future__ import annotations
 
 from enum import StrEnum

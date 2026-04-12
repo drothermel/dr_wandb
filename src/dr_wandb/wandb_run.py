@@ -1,5 +1,3 @@
-"""WandbRun: a Pydantic snapshot hydrated from a live W&B API run, plus RunSnapshot wrapper."""
-
 from __future__ import annotations
 
 from typing import Any

@@ -1,5 +1,3 @@
-"""ExportEngine: orchestrates fetching runs from W&B and writing them to an ExportStore."""
-
 from __future__ import annotations
 
 from pathlib import Path

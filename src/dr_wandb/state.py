@@ -1,5 +1,3 @@
-"""Incremental export state: which runs have been seen and how far history has advanced."""
-
 from __future__ import annotations
 
 from pydantic import BaseModel, Field

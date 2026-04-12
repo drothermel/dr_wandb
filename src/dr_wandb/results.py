@@ -1,5 +1,3 @@
-"""ExportManifest (on-disk record of one export) and ExportSummary (returned from export())."""
-
 from __future__ import annotations
 
 from pydantic import BaseModel

@@ -1,5 +1,3 @@
-"""ExportStore: per-export directory layout plus JSONL I/O for manifest, state, runs, and history."""
-
 from __future__ import annotations
 
 from collections.abc import Iterator
