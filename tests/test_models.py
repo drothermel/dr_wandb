@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from dr_wandb import (
     ExportMode,
     ExportRequest,
     ExportState,
+    ExportStore,
     HistoryRow,
     HistoryWindow,
     RunSnapshot,
@@ -111,3 +115,73 @@ def test_top_level_reexports_remain_available() -> None:
     assert request.sync_mode == SyncMode.INCREMENTAL
     assert state.name == "n"
     assert window.min_step == 1
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"min_step": -1},
+        {"max_step": -1},
+        {"max_records": 0},
+        {"max_records": -5},
+        {"min_step": 10, "max_step": 5},
+    ],
+)
+def test_history_window_rejects_invalid_bounds(
+    kwargs: dict[str, int],
+) -> None:
+    with pytest.raises(ValidationError):
+        HistoryWindow(**kwargs)
+
+
+def test_history_window_accepts_boundary_values() -> None:
+    assert HistoryWindow(min_step=0, max_step=0, max_records=1).min_step == 0
+
+
+@pytest.mark.parametrize(
+    "entity, project, name",
+    [
+        ("", "p", "n"),
+        ("   ", "p", "n"),
+        ("e", "", "n"),
+        ("e", "p", ""),
+        ("e", "p", "\t\n"),
+    ],
+)
+def test_export_request_rejects_blank_identity(
+    entity: str, project: str, name: str
+) -> None:
+    with pytest.raises(ValidationError):
+        ExportRequest(entity=entity, project=project, name=name)
+
+
+def test_export_request_strips_identity_whitespace() -> None:
+    request = ExportRequest(entity="  ml-moe  ", project=" moe ", name=" exp ")
+    assert request.entity == "ml-moe"
+    assert request.project == "moe"
+    assert request.name == "exp"
+
+
+def test_export_store_rejects_blank_name(tmp_path) -> None:
+    with pytest.raises(ValidationError):
+        ExportStore(name="", data_root=tmp_path)
+
+
+def test_wandb_run_history_keys_last_step_rejects_bool() -> None:
+    run = WandbRun(
+        run_id="r",
+        name="r",
+        entity="e",
+        project="p",
+        history_keys={"lastStep": True},
+    )
+    assert run.history_keys_last_step is None
+
+    run = WandbRun(
+        run_id="r",
+        name="r",
+        entity="e",
+        project="p",
+        history_keys={"lastStep": 42},
+    )
+    assert run.history_keys_last_step == 42

@@ -138,8 +138,10 @@ def _scan_history(
             kwargs["max_step"] = window.max_step
     try:
         entries = list(run.scan_history(**kwargs))
-    except TypeError:
-        kwargs.pop("max_step", None)
+    except TypeError as exc:
+        if "max_step" not in kwargs or "max_step" not in str(exc):
+            raise
+        kwargs.pop("max_step")
         entries = list(run.scan_history(**kwargs))
     if window is not None and window.max_records is not None:
         entries = entries[-window.max_records :]

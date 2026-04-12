@@ -52,9 +52,6 @@ class ExportEngine:
                 exported_at=exported_at,
             )
 
-        state.last_exported_at = exported_at
-        store.save_state(state)
-
         sorted_snapshots = sorted(
             snapshots.values(),
             key=lambda snapshot: snapshot.sort_key,
@@ -82,6 +79,9 @@ class ExportEngine:
             history_count=len(history_rows),
         )
         store.save_manifest(manifest)
+
+        state.last_exported_at = exported_at
+        store.save_state(state)
 
         return ExportSummary(
             name=self.request.name,

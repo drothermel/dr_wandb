@@ -88,7 +88,7 @@ class WandbRun(BaseModel):
     def history_keys_last_step(self) -> int | None:
         if isinstance(self.history_keys, dict):
             value = self.history_keys.get("lastStep")
-            if isinstance(value, int):
+            if isinstance(value, int) and not isinstance(value, bool):
                 return value
         return None
 

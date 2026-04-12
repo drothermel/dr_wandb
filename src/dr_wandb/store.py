@@ -8,7 +8,7 @@ import srsly
 from dr_ds.atomic_io import atomic_write_jsonl, dump_json_atomic
 from pydantic import BaseModel, computed_field
 
-from dr_wandb.config import ExportMode, ExportRequest, SyncMode
+from dr_wandb.config import ExportMode, ExportRequest, NonBlankStr, SyncMode
 from dr_wandb.history import HistoryRow
 from dr_wandb.results import ExportManifest
 from dr_wandb.state import ExportState
@@ -18,7 +18,7 @@ from dr_wandb.wandb_run import RunSnapshot
 class ExportStore(BaseModel):
     """Owns the on-disk layout for one named export and all of its file I/O."""
 
-    name: str
+    name: NonBlankStr
     data_root: Path
 
     @computed_field
@@ -83,8 +83,8 @@ class ExportStore(BaseModel):
         dump_json_atomic(self.state_path, state.model_dump(mode="python"))
 
     def load_run_snapshots(self) -> list[RunSnapshot]:
-        manifest = self.require_manifest()
-        records = self._read_jsonl(Path(manifest.runs_path))
+        self.require_manifest()
+        records = self._read_jsonl(self.runs_path)
         snapshots = [RunSnapshot.model_validate(record) for record in records]
         return sorted(
             snapshots,
@@ -100,7 +100,7 @@ class ExportStore(BaseModel):
     ) -> dict[str, RunSnapshot]:
         if request.sync_mode == SyncMode.FULL_RECONCILE or manifest is None:
             return {}
-        records = self._read_jsonl(Path(manifest.runs_path))
+        records = self._read_jsonl(self.runs_path)
         return {
             snapshot.run.run_id: snapshot
             for snapshot in (
@@ -120,7 +120,7 @@ class ExportStore(BaseModel):
         manifest = self.require_manifest()
         if manifest.history_path is None:
             return iter(())
-        records = self._read_jsonl(Path(manifest.history_path))
+        records = self._read_jsonl(self.history_path)
         return iter(HistoryRow.model_validate(row) for row in records)
 
     def load_existing_history_rows(
@@ -136,7 +136,7 @@ class ExportStore(BaseModel):
             or manifest.history_path is None
         ):
             return []
-        records = self._read_jsonl(Path(manifest.history_path))
+        records = self._read_jsonl(self.history_path)
         return [HistoryRow.model_validate(record) for record in records]
 
     def write_history_rows(self, rows: list[HistoryRow]) -> Path:
