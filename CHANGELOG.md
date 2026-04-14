@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.2
+
+- Added CLI progress logging so `wandb-export` reports the first processed
+  run and then each additional 5% completion bucket during exports.
+
 ## 3.0.1
 
 - Updated `dr-wandb` to depend on `dr-ds==0.1.4`.

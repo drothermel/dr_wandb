@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import typer
@@ -15,6 +16,17 @@ from dr_wandb.config import (
     SyncMode,
 )
 from dr_wandb.engine import ExportEngine
+
+
+def _configure_logging() -> None:
+    """Configure console logging for the public CLI without affecting other loggers."""
+    logger = logging.getLogger("dr_wandb")
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
 
 
 def export_command(
@@ -81,6 +93,7 @@ def export_command(
 
 def main() -> None:
     """Run the public `wandb-export` CLI."""
+    _configure_logging()
     typer.run(export_command)
 
 
