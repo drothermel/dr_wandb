@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 from pathlib import Path
 
 import typer
@@ -15,6 +17,24 @@ from dr_wandb.config import (
     SyncMode,
 )
 from dr_wandb.engine import ExportEngine
+
+
+def _resolve_log_level(level_name: str) -> int:
+    """Resolve a CLI log level name, falling back to INFO for invalid values."""
+    return logging.getLevelNamesMapping().get(level_name.upper(), logging.INFO)
+
+
+def _configure_logging() -> None:
+    """Configure console logging for the public CLI without affecting other loggers."""
+    logger = logging.getLogger("dr_wandb")
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        logger.addHandler(handler)
+    logger.setLevel(
+        _resolve_log_level(os.getenv("DR_WANDB_LOG_LEVEL", "INFO"))
+    )
+    logger.propagate = False
 
 
 def export_command(
@@ -81,6 +101,7 @@ def export_command(
 
 def main() -> None:
     """Run the public `wandb-export` CLI."""
+    _configure_logging()
     typer.run(export_command)
 
 

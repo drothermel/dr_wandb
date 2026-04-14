@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,8 @@ from dr_wandb.selection import select_runs
 from dr_wandb.state import ExportState
 from dr_wandb.store import ExportStore
 from dr_wandb.wandb_run import RunSnapshot, WandbRun
+
+logger = logging.getLogger(__name__)
 
 
 class ExportEngine:
@@ -46,13 +49,27 @@ class ExportEngine:
         new_history_rows: list[HistoryRow] = []
 
         api = wandb.Api(timeout=self.request.timeout_seconds)
-        for raw_run in select_runs(api=api, request=self.request, state=state):
+        selected_runs = select_runs(api=api, request=self.request, state=state)
+        logger.info(
+            "Exporting %s run(s) for %s/%s into %s",
+            len(selected_runs),
+            self.request.entity,
+            self.request.project,
+            self.request.name,
+        )
+        last_logged_progress = 0
+        for index, raw_run in enumerate(selected_runs, start=1):
             self._process_run(
                 raw_run=raw_run,
                 state=state,
                 snapshots=snapshots,
                 new_history_rows=new_history_rows,
                 exported_at=exported_at,
+            )
+            last_logged_progress = self._log_progress(
+                processed_runs=index,
+                total_runs=len(selected_runs),
+                last_logged_progress=last_logged_progress,
             )
 
         sorted_snapshots = sorted(
@@ -103,6 +120,35 @@ class ExportEngine:
             history_count=len(history_rows),
             exported_at=exported_at,
         )
+
+    def _log_progress(
+        self,
+        *,
+        processed_runs: int,
+        total_runs: int,
+        last_logged_progress: int,
+    ) -> int:
+        """Log the first processed run and each additional 5% completion bucket."""
+        if total_runs <= 0:
+            return last_logged_progress
+
+        percent_complete = (processed_runs * 100) // total_runs
+        progress_bucket = min((percent_complete // 5) * 5, 100)
+        should_log = processed_runs == 1
+        if processed_runs == 1 and progress_bucket >= 5:
+            last_logged_progress = progress_bucket
+        elif progress_bucket >= 5 and progress_bucket > last_logged_progress:
+            should_log = True
+            last_logged_progress = progress_bucket
+
+        if should_log:
+            logger.info(
+                "Processed %s/%s runs (%s%% complete)",
+                processed_runs,
+                total_runs,
+                percent_complete,
+            )
+        return last_logged_progress
 
     def _load_initial_state(self, store: ExportStore) -> ExportState:
         """Load prior export state unless full reconcile explicitly resets it."""

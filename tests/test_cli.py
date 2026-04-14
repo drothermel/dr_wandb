@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +9,7 @@ import pytest
 import typer
 
 from dr_wandb import ExportMode, ExportRequest, ExportSummary, SyncMode
-from dr_wandb.cli import export_command
+from dr_wandb.cli import _configure_logging, _resolve_log_level, export_command
 
 
 class _FakeEngine:
@@ -92,3 +93,30 @@ def test_cli_rejects_history_flags_without_history_mode(
             max_step=None,
             max_records=None,
         )
+
+
+def test_resolve_log_level_falls_back_to_info_for_invalid_values() -> None:
+    assert _resolve_log_level("DEBUG") == logging.DEBUG
+    assert _resolve_log_level("not-a-level") == logging.INFO
+
+
+def test_configure_logging_reads_log_level_from_environment(
+    monkeypatch: Any,
+) -> None:
+    logger = logging.getLogger("dr_wandb")
+    original_level = logger.level
+    original_propagate = logger.propagate
+    original_handlers = list(logger.handlers)
+    try:
+        logger.handlers = []
+        monkeypatch.setenv("DR_WANDB_LOG_LEVEL", "DEBUG")
+
+        _configure_logging()
+
+        assert logger.level == logging.DEBUG
+        assert logger.propagate is False
+        assert len(logger.handlers) == 1
+    finally:
+        logger.handlers = original_handlers
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
