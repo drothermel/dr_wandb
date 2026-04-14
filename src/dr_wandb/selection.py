@@ -27,7 +27,16 @@ def select_runs(
     request: ExportRequest,
     state: ExportState,
 ) -> list[Any]:
-    """Select new and refresh-worthy runs for one export request."""
+    """Select runs for one `ExportRequest` using the current `ExportState`.
+
+    Full reconcile returns all runs in API created-at order. Incremental mode
+    returns only newly created runs since `state.max_created_at` plus
+    previously tracked runs whose `RunTrackingState` still needs refresh. The
+    function reads `state.max_created_at` and `state.runs` but does not mutate
+    either field itself. Duplicate suppression is by run id: runs already seen
+    in this selection pass, runs with empty ids, and newly fetched runs whose
+    ids are already present in `state.runs` are skipped.
+    """
     if (
         request.sync_mode == SyncMode.FULL_RECONCILE
         or state.max_created_at is None

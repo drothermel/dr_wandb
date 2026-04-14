@@ -14,6 +14,7 @@ from dr_wandb import (
     SyncMode,
     WandbRun,
 )
+from dr_wandb.history import observed_last_history_step
 from dr_wandb.state import RunTrackingState
 
 from tests.helpers import FakeUser, history_run, metadata_run
@@ -207,3 +208,17 @@ def test_wandb_run_history_keys_last_step_rejects_bool() -> None:
         history_keys={"lastStep": 42},
     )
     assert run.history_keys_last_step == 42
+
+
+def test_observed_last_history_step_rejects_bool_raw_value() -> None:
+    class RawRun:
+        last_history_step = True
+
+    run = WandbRun(
+        run_id="r",
+        name="r",
+        entity="e",
+        project="p",
+    )
+
+    assert observed_last_history_step(wandb_run=run, raw_run=RawRun()) is None

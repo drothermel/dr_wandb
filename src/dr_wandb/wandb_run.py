@@ -111,6 +111,6 @@ class RunSnapshot(BaseModel):
         return (self.run.created_at or "", self.run.run_id)
 
 
-def _optional_str(value: Any) -> str | None:
+def _optional_str(value: object) -> str | None:
     """Return `None` for missing values and `str(value)` otherwise."""
     return None if value is None else str(value)

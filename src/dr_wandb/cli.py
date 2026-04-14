@@ -34,7 +34,12 @@ def export_command(
     max_step: int | None = typer.Option(None, "--max-step"),
     max_records: int | None = typer.Option(None, "--max-records"),
 ) -> None:
-    """Export W&B run metadata or history into a named local export store."""
+    """Export W&B run metadata or history into a named local export store.
+
+    If `has_history_selection` is true but `mode` is not
+    `ExportMode.HISTORY`, this command raises `typer.BadParameter`. Provide
+    any history selection flags only together with `--mode history`.
+    """
     has_history_selection = any(
         value is not None and value != []
         for value in [history_key, min_step, max_step, max_records]

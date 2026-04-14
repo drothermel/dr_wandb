@@ -118,7 +118,7 @@ def observed_last_history_step(
     if typed is not None:
         return typed
     value = getattr(raw_run, "last_history_step", None)
-    if isinstance(value, int):
+    if isinstance(value, int) and not isinstance(value, bool):
         return value
     return None
 
