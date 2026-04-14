@@ -7,3 +7,5 @@
   arrive as non-JSON-serializable SDK objects.
 - Verified export/store round-trips now normalize those objects into
   JSON-safe data instead of failing during snapshot writes.
+- Added a first pass of public API docstrings plus repo-level documentation
+  and verification guidance for the shared library/CLI surface.

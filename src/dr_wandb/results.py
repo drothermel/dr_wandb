@@ -1,3 +1,5 @@
+"""Define manifest and summary models for completed exports."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel
@@ -6,6 +8,8 @@ from dr_wandb.config import ExportMode, HistoryWindow, SyncMode
 
 
 class ExportManifest(BaseModel):
+    """Describe the durable on-disk contents of one named export."""
+
     schema_version: int = 1
     name: str
     entity: str
@@ -22,6 +26,8 @@ class ExportManifest(BaseModel):
 
 
 class ExportSummary(BaseModel):
+    """Summarize the artifacts produced by one export invocation."""
+
     name: str
     entity: str
     project: str

@@ -1,3 +1,5 @@
+"""Select which runs an export should fetch from the W&B API."""
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -8,6 +10,8 @@ from dr_wandb.state import ExportState, RunTrackingState
 
 
 class TerminalRunState(StrEnum):
+    """Enumerate run states that no longer need incremental refreshes."""
+
     FINISHED = "finished"
     FAILED = "failed"
     CRASHED = "crashed"
@@ -23,6 +27,7 @@ def select_runs(
     request: ExportRequest,
     state: ExportState,
 ) -> list[Any]:
+    """Select new and refresh-worthy runs for one export request."""
     if (
         request.sync_mode == SyncMode.FULL_RECONCILE
         or state.max_created_at is None
@@ -80,6 +85,7 @@ def _iter_runs(
     runs_per_page: int,
     filters: dict[str, Any] | None = None,
 ) -> Any:
+    """Iterate runs from the W&B API with the repo's standard ordering and paging."""
     return api.runs(
         f"{entity}/{project}",
         filters=filters or {},
@@ -90,10 +96,12 @@ def _iter_runs(
 
 
 def _chunked(values: list[str], size: int) -> list[list[str]]:
+    """Split a list into fixed-size batches."""
     return [
         values[index : index + size] for index in range(0, len(values), size)
     ]
 
 
 def _should_refresh(tracking: RunTrackingState) -> bool:
+    """Return whether an already-seen run should be refreshed incrementally."""
     return tracking.run_state not in TerminalRunState

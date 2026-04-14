@@ -1,3 +1,5 @@
+"""Coordinate W&B API reads with local export-store writes."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,12 +24,13 @@ from dr_wandb.wandb_run import RunSnapshot, WandbRun
 
 
 class ExportEngine:
-    """Fetch runs from W&B, merge with any prior export, and write JSONL + manifest."""
+    """Fetch runs from W&B, merge them into a named export, and persist results."""
 
     def __init__(self, request: ExportRequest) -> None:
         self.request = request
 
     def export(self) -> ExportSummary:
+        """Execute one export and return a summary of the written artifacts."""
         store = ExportStore(
             name=self.request.name, data_root=self.request.data_root
         )
@@ -102,6 +105,7 @@ class ExportEngine:
         )
 
     def _load_initial_state(self, store: ExportStore) -> ExportState:
+        """Load prior export state unless full reconcile explicitly resets it."""
         if self.request.sync_mode == SyncMode.FULL_RECONCILE:
             return ExportState(
                 name=self.request.name,
@@ -121,6 +125,7 @@ class ExportEngine:
         new_history_rows: list[HistoryRow],
         exported_at: str,
     ) -> None:
+        """Convert one raw run into stored snapshots and optional history rows."""
         wandb_run = WandbRun.from_wandb_run(
             raw_run,
             entity=self.request.entity,
@@ -163,6 +168,7 @@ class ExportEngine:
         run_count: int,
         history_count: int,
     ) -> ExportManifest:
+        """Build the manifest describing the export just written to disk."""
         selection = self.request.history_selection
         manifest_keys = (
             list(selection.keys)
