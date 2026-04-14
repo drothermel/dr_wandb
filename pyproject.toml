@@ -1,6 +1,6 @@
 [project]
 name = "dr-wandb"
-version = "3.0.2"
+version = "3.0.3"
 description = "Unified export toolkit for Weights & Biases"
 readme = "README.md"
 license = "MIT"

@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.0.3
+
+- Update to wandb 26.0.0
+
 ## 3.0.2
 
 - Added CLI progress logging so `wandb-export` reports the first processed
