@@ -119,8 +119,21 @@ class FakeApi:
         return runs
 
 
+class FakeUser:
+    def __init__(self, *, user_id: str, username: str) -> None:
+        self.id = user_id
+        self.username = username
+        self._secret = "hidden"
+        self.render = lambda: username
+
+
 def metadata_run(
-    run_id: str, *, created_at: str, updated_at: str, state: str
+    run_id: str,
+    *,
+    created_at: str,
+    updated_at: str,
+    state: str,
+    user: Any | None = None,
 ) -> FakeRun:
     attrs = {
         "id": run_id,
@@ -132,6 +145,7 @@ def metadata_run(
         "config": {"lr": 0.001},
         "summaryMetrics": {"loss": 1.23},
         "tags": ["baseline"],
+        "user": user,
         "url": f"https://wandb.ai/ml-moe/moe/runs/{run_id}",
     }
     return FakeRun(

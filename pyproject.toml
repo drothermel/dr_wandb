@@ -1,6 +1,6 @@
 [project]
 name = "dr-wandb"
-version = "3.0.0"
+version = "3.0.1"
 description = "Unified export toolkit for Weights & Biases"
 readme = "README.md"
 license = "MIT"
@@ -21,7 +21,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "dr-ds==0.1.3",
+    "dr-ds==0.1.4",
     "pydantic>=2.0.0",
     "srsly>=2.5.3",
     "typer>=0.20.0",
@@ -41,6 +41,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.uv.sources]
+dr-ds = { path = "../dr-ds" }
 
 [tool.hatch.build]
 exclude = [

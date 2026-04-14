@@ -16,7 +16,7 @@ from dr_wandb import (
     load_run_snapshots,
 )
 
-from tests.helpers import metadata_run
+from tests.helpers import FakeUser, metadata_run
 
 
 def test_store_path_layout(tmp_path: Path) -> None:
@@ -98,6 +98,38 @@ def test_store_round_trips_wandb_run(
     store = ExportStore(name="moe_runs", data_root=tmp_path)
     snapshots = store.load_run_snapshots()
     assert snapshots[0].run.summary_metrics["loss"] == 1.23
+
+
+def test_store_round_trips_non_json_user_objects(
+    tmp_path: Path, install_fake_wandb_api
+) -> None:
+    install_fake_wandb_api(
+        [
+            metadata_run(
+                "run-1",
+                created_at="2024-01-01T00:00:00+00:00",
+                updated_at="2024-01-01T00:10:00+00:00",
+                state="finished",
+                user=FakeUser(user_id="user-1", username="danielle"),
+            )
+        ]
+    )
+    ExportEngine(
+        ExportRequest(
+            entity="ml-moe",
+            project="moe",
+            name="moe_runs",
+            data_root=tmp_path,
+            mode=ExportMode.METADATA,
+        )
+    ).export()
+
+    store = ExportStore(name="moe_runs", data_root=tmp_path)
+    snapshots = store.load_run_snapshots()
+    assert snapshots[0].run.user == {
+        "id": "user-1",
+        "username": "danielle",
+    }
 
 
 def test_top_level_loader_helpers(
