@@ -4,6 +4,8 @@
 
 - Added CLI progress logging so `wandb-export` reports the first processed
   run and then each additional 5% completion bucket during exports.
+- Added `DR_WANDB_LOG_LEVEL` so CLI log verbosity can be overridden for batch
+  runs and CI without changing code.
 
 ## 3.0.1
 

@@ -105,6 +105,11 @@ History selection rules to rely on:
   underlying W&B API call
 - `--max-records` trims the final result to the most recent rows after scanning
 
+The CLI logs progress to stderr by default. Set `DR_WANDB_LOG_LEVEL` to a
+standard Python logging level such as `DEBUG`, `INFO`, `WARNING`, `ERROR`, or
+`CRITICAL` to override that behavior for batch runs or CI. Invalid values fall
+back to `INFO`.
+
 ## Sync Semantics
 
 `dr-wandb` supports two sync modes:
