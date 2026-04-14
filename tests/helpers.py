@@ -119,9 +119,47 @@ class FakeApi:
         return runs
 
 
+class FakeUser:
+    """Create a lightweight non-JSON-safe user object for normalization tests.
+
+    Parameters:
+    - user_id: value exposed through the `id` attribute
+    - username: value exposed through the `username` attribute
+
+    Important attributes:
+    - `id` and `username` are public fields expected to survive normalization
+    - `_secret` is a private field that should be ignored
+    - `render` is a callable attribute that should be ignored
+    """
+
+    def __init__(self, *, user_id: str, username: str) -> None:
+        self.id = user_id
+        self.username = username
+        self._secret = "hidden"
+        self.render = lambda: username
+
+
 def metadata_run(
-    run_id: str, *, created_at: str, updated_at: str, state: str
+    run_id: str,
+    *,
+    created_at: str,
+    updated_at: str,
+    state: str,
+    user: Any | None = None,
 ) -> FakeRun:
+    """Build a `FakeRun` metadata payload used in run-normalization tests.
+
+    Parameters:
+    - run_id: fake W&B run id and default display/name value
+    - created_at: ISO timestamp used for the run creation time
+    - updated_at: ISO timestamp used for the run update time
+    - state: fake W&B run state
+    - user: optional raw user-like object attached to the run payload
+
+    Returns:
+    - `FakeRun`: a metadata-only run with config, summary, tags, and optional
+      user fields populated for export/store normalization tests
+    """
     attrs = {
         "id": run_id,
         "name": run_id,
@@ -132,6 +170,7 @@ def metadata_run(
         "config": {"lr": 0.001},
         "summaryMetrics": {"loss": 1.23},
         "tags": ["baseline"],
+        "user": user,
         "url": f"https://wandb.ai/ml-moe/moe/runs/{run_id}",
     }
     return FakeRun(

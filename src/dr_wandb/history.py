@@ -1,3 +1,5 @@
+"""Convert raw W&B history scans into stable, mergeable exported rows."""
+
 from __future__ import annotations
 
 import hashlib
@@ -17,6 +19,8 @@ from dr_wandb.wandb_run import WandbRun
 
 
 class HistoryRow(BaseModel):
+    """Represent one exported history row for one run and one step-like record."""
+
     run_id: str
     step: int | None = None
     timestamp: str | None = None
@@ -29,6 +33,7 @@ class HistoryRow(BaseModel):
     def from_history_entry(
         cls, *, run_id: str, entry: dict[str, Any]
     ) -> HistoryRow:
+        """Build a stored history row from one raw `scan_history` entry."""
         wandb_value = entry.get("_wandb")
         return cls(
             run_id=run_id,
@@ -62,6 +67,7 @@ def scan_history_for_export(
     raw_run: Any,
     run_last_history_step: int | None,
 ) -> list[HistoryRow]:
+    """Scan and normalize raw W&B history rows for one run export."""
     if request.mode != ExportMode.HISTORY:
         return []
     selection = request.history_selection
@@ -81,6 +87,7 @@ def merge_history_rows(
     existing_history_rows: list[HistoryRow],
     new_history_rows: list[HistoryRow],
 ) -> list[HistoryRow]:
+    """Merge old and new history rows while deduplicating semantically identical entries."""
     by_key: dict[tuple[Any, ...], HistoryRow] = {}
     for row in [*existing_history_rows, *new_history_rows]:
         by_key[_history_row_key(row)] = row
@@ -96,6 +103,7 @@ def merge_history_rows(
 
 
 def max_history_step(rows: list[HistoryRow]) -> int | None:
+    """Return the largest concrete step observed in the given history rows."""
     step_values = [row.step for row in rows if row.step is not None]
     if len(step_values) == 0:
         return None
@@ -105,11 +113,12 @@ def max_history_step(rows: list[HistoryRow]) -> int | None:
 def observed_last_history_step(
     *, wandb_run: WandbRun, raw_run: Any
 ) -> int | None:
+    """Return the best available notion of the run's last scanned history step."""
     typed = wandb_run.history_keys_last_step
     if typed is not None:
         return typed
     value = getattr(raw_run, "last_history_step", None)
-    if isinstance(value, int):
+    if isinstance(value, int) and not isinstance(value, bool):
         return value
     return None
 
@@ -117,6 +126,7 @@ def observed_last_history_step(
 def _default_incremental_window(
     run_last_history_step: int | None,
 ) -> HistoryWindow | None:
+    """Start incremental history scans just after the last stored step when known."""
     if run_last_history_step is None:
         return None
     return HistoryWindow(min_step=run_last_history_step + 1)
@@ -128,6 +138,7 @@ def _scan_history(
     keys: list[str] | None,
     window: HistoryWindow | None,
 ) -> list[dict[str, Any]]:
+    """Scan raw history entries while handling W&B's inconsistent `max_step` support."""
     kwargs: dict[str, Any] = {}
     if keys is not None:
         kwargs["keys"] = keys
@@ -149,6 +160,7 @@ def _scan_history(
 
 
 def _history_row_key(row: HistoryRow) -> tuple[Any, ...]:
+    """Build a stable deduplication key for one history row."""
     payload_hash = hashlib.sha256(
         json.dumps(
             to_jsonable(

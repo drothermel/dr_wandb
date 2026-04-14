@@ -1,3 +1,5 @@
+"""Normalize raw W&B SDK run objects into stored snapshot models."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -7,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class WandbRun(BaseModel):
+    """Represent one exported W&B run in a JSON-safe, typed shape."""
+
     model_config = ConfigDict(extra="allow")
 
     run_id: str
@@ -46,6 +50,7 @@ class WandbRun(BaseModel):
         project: str,
         include_metadata: bool,
     ) -> WandbRun:
+        """Build a stored run model from a raw W&B SDK run object."""
         summary = getattr(run, "summary_metrics", None)
         if summary is None:
             summary = getattr(run, "summary", None)
@@ -86,6 +91,7 @@ class WandbRun(BaseModel):
 
     @property
     def history_keys_last_step(self) -> int | None:
+        """Return the typed `historyKeys.lastStep` value when it is a real int."""
         if isinstance(self.history_keys, dict):
             value = self.history_keys.get("lastStep")
             if isinstance(value, int) and not isinstance(value, bool):
@@ -94,13 +100,17 @@ class WandbRun(BaseModel):
 
 
 class RunSnapshot(BaseModel):
+    """Pair one stored run payload with the time it was exported."""
+
     run: WandbRun
     exported_at: str
 
     @property
     def sort_key(self) -> tuple[str, str]:
+        """Return the newest-first sort key used for persisted snapshots."""
         return (self.run.created_at or "", self.run.run_id)
 
 
-def _optional_str(value: Any) -> str | None:
+def _optional_str(value: object) -> str | None:
+    """Return `None` for missing values and `str(value)` otherwise."""
     return None if value is None else str(value)

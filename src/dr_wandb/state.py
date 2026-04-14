@@ -1,3 +1,5 @@
+"""Track incremental export state across runs and export invocations."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
@@ -6,6 +8,8 @@ from dr_wandb.wandb_run import WandbRun
 
 
 class RunTrackingState(BaseModel):
+    """Record the incremental-export facts tracked for one run."""
+
     run_id: str
     created_at: str | None = None
     updated_at: str | None = None
@@ -19,6 +23,7 @@ class RunTrackingState(BaseModel):
         *,
         last_history_step: int | None,
     ) -> RunTrackingState:
+        """Build tracking state from the current stored run snapshot."""
         return cls(
             run_id=run.run_id,
             created_at=run.created_at,
@@ -29,6 +34,8 @@ class RunTrackingState(BaseModel):
 
 
 class ExportState(BaseModel):
+    """Persist cross-run incremental export state for one named export."""
+
     schema_version: int = 1
     name: str
     entity: str
@@ -38,6 +45,7 @@ class ExportState(BaseModel):
     runs: dict[str, RunTrackingState] = Field(default_factory=dict)
 
     def begin_run_tracking(self, wandb_run: WandbRun) -> RunTrackingState:
+        """Start or refresh tracking for one run and update aggregate state."""
         prior = self.runs.get(wandb_run.run_id)
         tracking_state = RunTrackingState.from_wandb_run(
             wandb_run,

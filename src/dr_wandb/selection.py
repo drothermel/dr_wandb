@@ -1,3 +1,5 @@
+"""Select which runs an export should fetch from the W&B API."""
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -8,6 +10,8 @@ from dr_wandb.state import ExportState, RunTrackingState
 
 
 class TerminalRunState(StrEnum):
+    """Enumerate run states that no longer need incremental refreshes."""
+
     FINISHED = "finished"
     FAILED = "failed"
     CRASHED = "crashed"
@@ -23,6 +27,16 @@ def select_runs(
     request: ExportRequest,
     state: ExportState,
 ) -> list[Any]:
+    """Select runs for one `ExportRequest` using the current `ExportState`.
+
+    Full reconcile returns all runs in API created-at order. Incremental mode
+    returns only newly created runs since `state.max_created_at` plus
+    previously tracked runs whose `RunTrackingState` still needs refresh. The
+    function reads `state.max_created_at` and `state.runs` but does not mutate
+    either field itself. Duplicate suppression is by run id: runs already seen
+    in this selection pass, runs with empty ids, and newly fetched runs whose
+    ids are already present in `state.runs` are skipped.
+    """
     if (
         request.sync_mode == SyncMode.FULL_RECONCILE
         or state.max_created_at is None
@@ -80,6 +94,7 @@ def _iter_runs(
     runs_per_page: int,
     filters: dict[str, Any] | None = None,
 ) -> Any:
+    """Iterate runs from the W&B API with the repo's standard ordering and paging."""
     return api.runs(
         f"{entity}/{project}",
         filters=filters or {},
@@ -90,10 +105,12 @@ def _iter_runs(
 
 
 def _chunked(values: list[str], size: int) -> list[list[str]]:
+    """Split a list into fixed-size batches."""
     return [
         values[index : index + size] for index in range(0, len(values), size)
     ]
 
 
 def _should_refresh(tracking: RunTrackingState) -> bool:
+    """Return whether an already-seen run should be refreshed incrementally."""
     return tracking.run_state not in TerminalRunState

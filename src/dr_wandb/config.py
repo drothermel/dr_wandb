@@ -1,3 +1,5 @@
+"""Define configuration models for export mode, sync mode, and request shape."""
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -12,22 +14,29 @@ NonBlankStr = Annotated[
 
 
 class ExportMode(StrEnum):
+    """Enumerate the supported export payload shapes."""
+
     METADATA = "metadata"
     HISTORY = "history"
 
 
 class SyncMode(StrEnum):
+    """Enumerate whether an export reuses prior state or rebuilds from scratch."""
+
     INCREMENTAL = "incremental"
     FULL_RECONCILE = "full_reconcile"
 
 
 class HistoryWindow(BaseModel):
+    """Describe step-based and record-count bounds for history export."""
+
     min_step: int | None = None
     max_step: int | None = None
     max_records: int | None = None
 
     @model_validator(mode="after")
     def _validate_bounds(self) -> HistoryWindow:
+        """Reject invalid history windows after model validation."""
         if self.min_step is not None and self.min_step < 0:
             raise ValueError("min_step must be >= 0")
         if self.max_step is not None and self.max_step < 0:
@@ -44,11 +53,15 @@ class HistoryWindow(BaseModel):
 
 
 class HistorySelection(BaseModel):
+    """Describe optional key and window filters for history export."""
+
     keys: list[str] | None = None
     window: HistoryWindow | None = None
 
 
 class ExportRequest(BaseModel):
+    """Capture one export invocation and the choices that shape it."""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     entity: NonBlankStr

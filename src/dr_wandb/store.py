@@ -1,3 +1,5 @@
+"""Define the on-disk export layout and the I/O helpers that back it."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -16,7 +18,7 @@ from dr_wandb.wandb_run import RunSnapshot
 
 
 class ExportStore(BaseModel):
-    """Owns the on-disk layout for one named export and all of its file I/O."""
+    """Own the on-disk layout for one named export and all of its file I/O."""
 
     name: NonBlankStr
     data_root: Path
@@ -24,25 +26,31 @@ class ExportStore(BaseModel):
     @computed_field
     @property
     def export_dir(self) -> Path:
+        """Return the root directory for this named export."""
         return self.data_root / self.name
 
     @property
     def manifest_path(self) -> Path:
+        """Return the manifest path for this export."""
         return self.export_dir / "manifest.json"
 
     @property
     def state_path(self) -> Path:
+        """Return the incremental-state path for this export."""
         return self.export_dir / "state.json"
 
     @property
     def runs_path(self) -> Path:
+        """Return the current run-snapshot JSONL path for this export."""
         return self.export_dir / "runs.jsonl"
 
     @property
     def history_path(self) -> Path:
+        """Return the optional history JSONL path for this export."""
         return self.export_dir / "history.jsonl"
 
     def load_manifest(self) -> ExportManifest | None:
+        """Load the export manifest if it exists, else return `None`."""
         if not self.manifest_path.exists():
             return None
         return ExportManifest.model_validate(
@@ -50,6 +58,7 @@ class ExportStore(BaseModel):
         )
 
     def require_manifest(self) -> ExportManifest:
+        """Load the manifest or raise if the export has not been initialized."""
         manifest = self.load_manifest()
         if manifest is None:
             raise FileNotFoundError(
@@ -59,11 +68,13 @@ class ExportStore(BaseModel):
         return manifest
 
     def save_manifest(self, manifest: ExportManifest) -> None:
+        """Persist the manifest atomically."""
         dump_json_atomic(
             self.manifest_path, manifest.model_dump(mode="python")
         )
 
     def load_state(self, *, entity: str, project: str) -> ExportState:
+        """Load incremental export state and validate it matches the request."""
         if not self.state_path.exists():
             return ExportState(name=self.name, entity=entity, project=project)
         state = ExportState.model_validate(srsly.read_json(self.state_path))
@@ -80,9 +91,11 @@ class ExportStore(BaseModel):
         return state
 
     def save_state(self, state: ExportState) -> None:
+        """Persist incremental export state atomically."""
         dump_json_atomic(self.state_path, state.model_dump(mode="python"))
 
     def load_run_snapshots(self) -> list[RunSnapshot]:
+        """Load current run snapshots, sorted newest-first by the snapshot key."""
         self.require_manifest()
         records = self._read_jsonl(self.runs_path)
         snapshots = [RunSnapshot.model_validate(record) for record in records]
@@ -98,6 +111,7 @@ class ExportStore(BaseModel):
         request: ExportRequest,
         manifest: ExportManifest | None,
     ) -> dict[str, RunSnapshot]:
+        """Load prior snapshots only when incremental sync can reuse them."""
         if request.sync_mode == SyncMode.FULL_RECONCILE or manifest is None:
             return {}
         records = self._read_jsonl(self.runs_path)
@@ -109,6 +123,7 @@ class ExportStore(BaseModel):
         }
 
     def write_run_snapshots(self, snapshots: list[RunSnapshot]) -> Path:
+        """Write the current snapshot set to `runs.jsonl` atomically."""
         path = self.runs_path
         atomic_write_jsonl(
             path,
@@ -117,6 +132,7 @@ class ExportStore(BaseModel):
         return path
 
     def iter_history_rows(self) -> Iterator[HistoryRow]:
+        """Iterate stored history rows if this export includes them."""
         manifest = self.require_manifest()
         if manifest.history_path is None:
             return iter(())
@@ -129,6 +145,7 @@ class ExportStore(BaseModel):
         request: ExportRequest,
         manifest: ExportManifest | None,
     ) -> list[HistoryRow]:
+        """Load prior history rows only when incremental history sync can reuse them."""
         if (
             request.sync_mode == SyncMode.FULL_RECONCILE
             or request.mode != ExportMode.HISTORY
@@ -140,6 +157,7 @@ class ExportStore(BaseModel):
         return [HistoryRow.model_validate(record) for record in records]
 
     def write_history_rows(self, rows: list[HistoryRow]) -> Path:
+        """Write merged history rows to `history.jsonl` atomically."""
         path = self.history_path
         atomic_write_jsonl(
             path, [row.model_dump(mode="python") for row in rows]
@@ -147,11 +165,13 @@ class ExportStore(BaseModel):
         return path
 
     def remove_history(self) -> None:
+        """Remove stale history output when the export switches back to metadata-only."""
         if self.history_path.exists():
             self.history_path.unlink()
 
     @staticmethod
     def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+        """Read a JSONL file into plain dict records, returning an empty list if absent."""
         if not path.exists():
             return []
         return [
@@ -160,12 +180,15 @@ class ExportStore(BaseModel):
 
 
 def load_manifest(name: str, data_root: Path) -> ExportManifest | None:
+    """Load the manifest for one named export."""
     return ExportStore(name=name, data_root=data_root).load_manifest()
 
 
 def load_run_snapshots(name: str, data_root: Path) -> list[RunSnapshot]:
+    """Load current run snapshots for one named export."""
     return ExportStore(name=name, data_root=data_root).load_run_snapshots()
 
 
 def iter_history_rows(name: str, data_root: Path) -> Iterator[HistoryRow]:
+    """Iterate stored history rows for one named export."""
     return ExportStore(name=name, data_root=data_root).iter_history_rows()

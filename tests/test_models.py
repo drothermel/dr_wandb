@@ -14,9 +14,10 @@ from dr_wandb import (
     SyncMode,
     WandbRun,
 )
+from dr_wandb.history import observed_last_history_step
 from dr_wandb.state import RunTrackingState
 
-from tests.helpers import history_run, metadata_run
+from tests.helpers import FakeUser, history_run, metadata_run
 
 
 def test_wandb_run_from_fake_run() -> None:
@@ -68,6 +69,28 @@ def test_run_tracking_state_from_wandb_run() -> None:
     assert tracking.updated_at == "2024-01-01T00:10:00+00:00"
     assert tracking.run_state == "finished"
     assert tracking.last_history_step == 12
+
+
+def test_wandb_run_normalizes_non_json_user_objects() -> None:
+    run = metadata_run(
+        "run-1",
+        created_at="2024-01-01T00:00:00+00:00",
+        updated_at="2024-01-01T00:10:00+00:00",
+        state="finished",
+        user=FakeUser(user_id="user-1", username="danielle"),
+    )
+
+    wandb_run = WandbRun.from_wandb_run(
+        run,
+        entity="ml-moe",
+        project="moe",
+        include_metadata=False,
+    )
+
+    assert wandb_run.user == {
+        "id": "user-1",
+        "username": "danielle",
+    }
 
 
 def test_history_row_from_history_entry() -> None:
@@ -185,3 +208,17 @@ def test_wandb_run_history_keys_last_step_rejects_bool() -> None:
         history_keys={"lastStep": 42},
     )
     assert run.history_keys_last_step == 42
+
+
+def test_observed_last_history_step_rejects_bool_raw_value() -> None:
+    class RawRun:
+        last_history_step = True
+
+    run = WandbRun(
+        run_id="r",
+        name="r",
+        entity="e",
+        project="p",
+    )
+
+    assert observed_last_history_step(wandb_run=run, raw_run=RawRun()) is None
