@@ -42,9 +42,6 @@ build-backend = "hatchling.build"
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[tool.uv.sources]
-dr-ds = { path = "../dr-ds" }
-
 [tool.hatch.build]
 exclude = [
   "docs",

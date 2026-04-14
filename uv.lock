@@ -120,25 +120,15 @@ wheels = [
 [[package]]
 name = "dr-ds"
 version = "0.1.4"
-source = { directory = "../dr-ds" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "srsly" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "pandas", specifier = ">=2.3.3" },
-    { name = "pyarrow", specifier = ">=21.0.0" },
-    { name = "srsly", specifier = ">=2.5.3" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.0.3" },
-    { name = "ruff", specifier = ">=0.15.10" },
-    { name = "ty", specifier = ">=0.0.29" },
+sdist = { url = "https://files.pythonhosted.org/packages/3c/6d/02f9f0e88d81f507c9d2f5f7c3d6c870cfcfdaa42cdb55c518aa6501949e/dr_ds-0.1.4.tar.gz", hash = "sha256:af9eb397710163137318bfeaaa6c3a41b998b93032efe4894bfd49196a15121d", size = 34691, upload-time = "2026-04-14T17:38:19.969Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/72/f9/a518606344719327fd2e61e8554eafd6aaca34a32d25c7bf2335172d16a4/dr_ds-0.1.4-py3-none-any.whl", hash = "sha256:a0a01680def4f36ce92ff53d753dc2a83c9cfc9d9bba0952af67c83a0dd66d59", size = 9752, upload-time = "2026-04-14T17:38:18.824Z" },
 ]
 
 [[package]]
@@ -162,7 +152,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "dr-ds", directory = "../dr-ds" },
+    { name = "dr-ds", specifier = "==0.1.4" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "srsly", specifier = ">=2.5.3" },
     { name = "typer", specifier = ">=0.20.0" },
